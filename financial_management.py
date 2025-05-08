@@ -59,9 +59,16 @@ def calculate_financials(starting_balance, bike_repairs, fuel, airtime,
         "Average Order Value": average_order_value
     }
 
-# Save data to CSV
 def save_to_csv(data_dict, report_date):
-    """Save financial data to CSV."""
+    """Save financial data to CSV and ensure the file is properly created for download.
+    
+    Args:
+        data_dict (dict): Dictionary containing financial data
+        report_date (datetime.date): Date of the financial report
+        
+    Returns:
+        str: CSV data as string for download
+    """
     # Format the date
     formatted_date = report_date.strftime('%Y-%m-%d')
     
@@ -84,34 +91,29 @@ def save_to_csv(data_dict, report_date):
         'Average Order Value': data_dict['Average Order Value']
     }])
     
-    # Check if we have existing data
+    # Initialize financial_data in session state if not exists
     if 'financial_data' not in st.session_state:
         st.session_state.financial_data = df
     else:
         # Check if entry for this date already exists
         existing_data = st.session_state.financial_data
-        if formatted_date in existing_data['Date'].values:
+        date_exists = formatted_date in existing_data['Date'].values if 'Date' in existing_data.columns else False
+        
+        if date_exists:
             # Update existing entry
             existing_data.loc[existing_data['Date'] == formatted_date] = df.values
+            st.session_state.financial_data = existing_data
         else:
             # Append new entry
             st.session_state.financial_data = pd.concat([existing_data, df], ignore_index=True)
     
-    # Return CSV data for download
-    return st.session_state.financial_data.to_csv(index=False)
-
-# Load data from CSV
-def load_data_from_csv(uploaded_file):
-    """Load financial data from uploaded CSV file."""
-    df = pd.read_csv(uploaded_file)
+    # Make sure we save the updated data to CSV
+    csv_data = st.session_state.financial_data.to_csv(index=False)
     
-    # Ensure Date column is datetime
-    if 'Date' in df.columns:
-        df['Date'] = pd.to_datetime(df['Date'])
+    # Log success message
+    st.success(f"Data for {report_date.strftime('%B %d, %Y')} saved successfully!")
     
-    # Store in session state
-    st.session_state.financial_data = df
-    return df
+    return csv_data
 
 # Generate summary statistics
 def generate_summary(data, period=None):
