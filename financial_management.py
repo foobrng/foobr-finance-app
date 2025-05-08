@@ -18,13 +18,21 @@ def save_data_to_file(data):
     """Save DataFrame to local file for persistence."""
     # Convert to records format for simpler serialization
     if not data.empty:
-        records = data.to_dict('records')
+        # Ensure date is converted to string for JSON serialization
+        data_copy = data.copy()
+        if 'Date' in data_copy.columns and pd.api.types.is_datetime64_any_dtype(data_copy['Date']):
+            data_copy['Date'] = data_copy['Date'].dt.strftime('%Y-%m-%d')
+        
+        records = data_copy.to_dict('records')
         with open('foobr_financial_data.json', 'w') as f:
             json.dump(records, f)
     else:
         # Create empty file if no data
         with open('foobr_financial_data.json', 'w') as f:
             json.dump([], f)
+    
+    # Debug info
+    st.session_state['debug_message'] = f"Data saved: {len(data)} records"
             
 def load_data_from_file():
     """Load DataFrame from local file."""
@@ -37,9 +45,14 @@ def load_data_from_file():
                 df = pd.DataFrame(records)
                 if 'Date' in df.columns:
                     df['Date'] = pd.to_datetime(df['Date'])
+                st.session_state['debug_message'] = f"Loaded {len(df)} records from file"
                 return df
+            else:
+                st.session_state['debug_message'] = "File exists but contains no records"
+        else:
+            st.session_state['debug_message'] = "File does not exist yet"
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.session_state['debug_message'] = f"Error loading data: {e}"
     
     return pd.DataFrame()
 
@@ -71,6 +84,11 @@ st.markdown("""
     }
     .tab-content {
         padding: 1rem 0;
+    }
+    .debug-info {
+        font-size: 0.8rem;
+        color: #888;
+        margin-top: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -142,17 +160,27 @@ def save_to_csv(data_dict, report_date):
         'Average Order Value': data_dict['Average Order Value']
     }])
     
+    # Convert Date to datetime to ensure consistency
+    df['Date'] = pd.to_datetime(df['Date'])
+    
     # Initialize financial_data in session state if not exists
-    if 'financial_data' not in st.session_state:
+    if 'financial_data' not in st.session_state or st.session_state.financial_data is None:
         st.session_state.financial_data = df
     else:
         # Check if entry for this date already exists
         existing_data = st.session_state.financial_data
-        date_exists = formatted_date in existing_data['Date'].values if 'Date' in existing_data.columns else False
+        
+        # Ensure Date column is datetime for comparison
+        if 'Date' in existing_data.columns and not pd.api.types.is_datetime64_any_dtype(existing_data['Date']):
+            existing_data['Date'] = pd.to_datetime(existing_data['Date'])
+        
+        # Find matching dates to update
+        matching_dates = existing_data['Date'] == pd.to_datetime(formatted_date) if 'Date' in existing_data.columns else []
+        date_exists = any(matching_dates) if isinstance(matching_dates, pd.Series) else False
         
         if date_exists:
             # Update existing entry
-            existing_data.loc[existing_data['Date'] == formatted_date] = df.values
+            existing_data.loc[matching_dates] = df.values
             st.session_state.financial_data = existing_data
         else:
             # Append new entry
@@ -242,15 +270,19 @@ def load_data_from_csv(file):
 
 # Main application
 def main():
-    # Display app title
-    st.markdown("<h1 class='main-header'>Foobr Financial Dashboard</h1>", unsafe_allow_html=True)
+    # Initialize debug message if not present
+    if 'debug_message' not in st.session_state:
+        st.session_state['debug_message'] = "App initialized"
     
-    # Load persistent data into session state
+    # Load persistent data into session state FIRST THING when app starts
     if 'financial_data' not in st.session_state:
         st.session_state.financial_data = load_data_from_file()
     
+    # Display app title
+    st.markdown("<h1 class='main-header'>Foobr Financial Dashboard</h1>", unsafe_allow_html=True)
+    
     # Top navigation using tabs instead of sidebar
-    tab1, tab2 = st.tabs(["Daily Entry", "Saved Financial Records"])
+    tab1, tab2, tab3 = st.tabs(["Daily Entry", "Saved Financial Records", "Debug Info"])
     
     # Daily Entry Page
     with tab1:
@@ -370,7 +402,7 @@ def main():
                 if save_button:
                     # Save the data in session state
                     csv_data = save_to_csv(save_data, report_date)
-                    st.success(f"Data for {report_date.strftime('%B %d, %Y')} saved successfully! View in Historical Data tab.")
+                    st.success(f"Data for {report_date.strftime('%B %d, %Y')} saved successfully! View in Saved Financial Records tab.")
                     st.download_button(
                         label="Download Daily Report",
                         data=csv_data,
@@ -383,7 +415,24 @@ def main():
         st.markdown("<h3 class='subheader'>Saved Financial Records</h3>", unsafe_allow_html=True)
         
         # Get data from session state (saved financial records)
-        data = st.session_state.financial_data
+        if 'financial_data' in st.session_state and not st.session_state.financial_data.empty:
+            data = st.session_state.financial_data
+            
+            # Ensure Date column is datetime
+            if 'Date' in data.columns and not pd.api.types.is_datetime64_any_dtype(data['Date']):
+                data['Date'] = pd.to_datetime(data['Date'])
+        else:
+            # Try loading from file again as a backup
+            data = load_data_from_file()
+            if not data.empty:
+                st.session_state.financial_data = data
+                
+        # Button to force refresh data from file
+        if st.button("Refresh Data From File"):
+            fresh_data = load_data_from_file()
+            st.session_state.financial_data = fresh_data
+            data = fresh_data
+            st.success(f"Data refreshed! Loaded {len(data)} records.")
                 
         # Option to upload previous records
         with st.expander("Upload Previous Records"):
@@ -394,19 +443,23 @@ def main():
                     if 'financial_data' not in st.session_state or st.session_state.financial_data.empty:
                         st.session_state.financial_data = imported_data
                     else:
-                        st.session_state.financial_data = pd.concat([st.session_state.financial_data, imported_data]).drop_duplicates(subset=['Date']).reset_index(drop=True)
+                        # Convert dates for proper comparison
+                        if 'Date' in imported_data.columns:
+                            imported_data['Date'] = pd.to_datetime(imported_data['Date'])
+                        
+                        if 'Date' in st.session_state.financial_data.columns:
+                            st.session_state.financial_data['Date'] = pd.to_datetime(st.session_state.financial_data['Date'])
+                            
+                        # Merge data, keeping only unique dates
+                        combined = pd.concat([st.session_state.financial_data, imported_data])
+                        st.session_state.financial_data = combined.drop_duplicates(subset=['Date']).reset_index(drop=True)
+                    
                     # Save to persistent storage
                     save_data_to_file(st.session_state.financial_data)
                     data = st.session_state.financial_data
                     st.success(f"Loaded {len(imported_data)} records from CSV file.")
         
-        # Button to refresh data (useful for testing)
-        if st.button("Refresh Data"):
-            st.session_state.financial_data = load_data_from_file()
-            data = st.session_state.financial_data
-            st.success("Data refreshed!")
-        
-        if data.empty:
+        if data is None or data.empty:
             st.info("No financial records found. Add entries in the Daily Entry tab to see them here.")
         else:
             # Display data summaries by period
@@ -488,7 +541,52 @@ def main():
             
             # Show the data table
             st.dataframe(display_df)
+    
+    # Debug tab
+    with tab3:
+        st.markdown("<h3 class='subheader'>Debug Information</h3>", unsafe_allow_html=True)
+        st.markdown("This tab shows technical information to help troubleshoot any issues.")
+        
+        # Display debug message
+        st.subheader("Session State Debug Info")
+        st.markdown(f"Debug message: {st.session_state['debug_message']}")
+        
+        # Check if file exists and show file info
+        st.subheader("File System Info")
+        if os.path.exists('foobr_financial_data.json'):
+            file_size = os.path.getsize('foobr_financial_data.json')
+            file_mod_time = os.path.getmtime('foobr_financial_data.json')
+            mod_time_str = datetime.datetime.fromtimestamp(file_mod_time).strftime('%Y-%m-%d %H:%M:%S')
             
+            st.write(f"Data file exists: Yes")
+            st.write(f"File size: {file_size} bytes")
+            st.write(f"Last modified: {mod_time_str}")
+            
+            # Show file contents
+            with open('foobr_financial_data.json', 'r') as f:
+                raw_content = f.read()
+            
+            st.subheader("Raw File Contents")
+            st.code(raw_content, language="json")
+        else:
+            st.write("Data file does not exist yet")
+        
+        # Show session state financial data
+        st.subheader("Session State Financial Data")
+        if 'financial_data' in st.session_state and not st.session_state.financial_data.empty:
+            st.write(f"Number of records: {len(st.session_state.financial_data)}")
+            st.dataframe(st.session_state.financial_data)
+        else:
+            st.write("No financial data in session state")
+            
+        # Clear data button (for testing)
+        if st.button("Clear All Data (Debug)"):
+            if os.path.exists('foobr_financial_data.json'):
+                os.remove('foobr_financial_data.json')
+            st.session_state.financial_data = pd.DataFrame()
+            st.session_state['debug_message'] = "All data cleared"
+            st.success("All data has been cleared!")
+    
 # Run the application
 if __name__ == "__main__":
     main()
