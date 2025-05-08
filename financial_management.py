@@ -1,5 +1,4 @@
 import streamlit as st
-import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,6 +14,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Test to ensure the app is rendering
+st.write("Welcome to the Foobr Financial Dashboard!")
 
 # Add custom CSS to improve the UI
 st.markdown("""
