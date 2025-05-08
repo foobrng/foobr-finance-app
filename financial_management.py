@@ -176,6 +176,54 @@ def visualize_trends(data):
         'monthly': monthly_data
     }
 
+def filter_data_by_period(data, period):
+    """Filter DataFrame by selected time period.
+    
+    Args:
+        data (pd.DataFrame): DataFrame containing financial data
+        period (str): Time period to filter by ('week', 'month', 'all')
+        
+    Returns:
+        pd.DataFrame: Filtered DataFrame
+    """
+    if data.empty or 'Date' not in data.columns:
+        return data
+        
+    # Ensure Date column is datetime
+    if not pd.api.types.is_datetime64_any_dtype(data['Date']):
+        data['Date'] = pd.to_datetime(data['Date'])
+    
+    # Filter based on period
+    if period == 'week':
+        today = pd.Timestamp.today()
+        start_of_week = today - pd.Timedelta(days=today.dayofweek)
+        return data[data['Date'] >= start_of_week]
+    elif period == 'month':
+        today = pd.Timestamp.today()
+        start_of_month = today.replace(day=1)
+        return data[data['Date'] >= start_of_month]
+    else:  # 'all'
+        return data
+
+def load_data_from_csv(file):
+    """Load financial data from uploaded CSV file.
+    
+    Args:
+        file: File object from st.file_uploader
+        
+    Returns:
+        pd.DataFrame: Loaded data
+    """
+    try:
+        data = pd.read_csv(file)
+        # Convert Date column to datetime if it exists
+        if 'Date' in data.columns:
+            data['Date'] = pd.to_datetime(data['Date'])
+        return data
+    except Exception as e:
+        st.error(f"Error loading CSV file: {e}")
+        return pd.DataFrame()
+
 # Main application
 def main():
     # Display app title
@@ -303,208 +351,178 @@ def main():
                 mime="text/csv"
             )
     
-    def filter_data_by_period(data, period):
-    """Filter DataFrame by selected time period.
-    
-    Args:
-        data (pd.DataFrame): DataFrame containing financial data
-        period (str): Time period to filter by ('week', 'month', 'all')
+    # Historical Data Page
+    elif app_mode == "Historical Data":
+        st.subheader("Historical Financial Data")
         
-    Returns:
-        pd.DataFrame: Filtered DataFrame
-    """
-    if data.empty or 'Date' not in data.columns:
-        return data
+        # File uploader for CSV
+        uploaded_file = st.file_uploader("Upload financial data CSV", type="csv")
         
-    # Ensure Date column is datetime
-    if not pd.api.types.is_datetime64_any_dtype(data['Date']):
-        data['Date'] = pd.to_datetime(data['Date'])
-    
-    # Filter based on period
-    if period == 'week':
-        today = pd.Timestamp.today()
-        start_of_week = today - pd.Timedelta(days=today.dayofweek)
-        return data[data['Date'] >= start_of_week]
-    elif period == 'month':
-        today = pd.Timestamp.today()
-        start_of_month = today.replace(day=1)
-        return data[data['Date'] >= start_of_month]
-    else:  # 'all'
-        return data
-
-
-# Modified Historical Data Page Section
-elif app_mode == "Historical Data":
-    st.subheader("Historical Financial Data")
-    
-    # File uploader for CSV
-    uploaded_file = st.file_uploader("Upload financial data CSV", type="csv")
-    
-    if uploaded_file is not None:
-        data = load_data_from_csv(uploaded_file)
-        st.success(f"Loaded {len(data)} records from CSV file.")
-    else:
-        data = st.session_state.financial_data
-    
-    if data.empty:
-        st.info("No historical data available. Please upload a CSV file or add entries in the Daily Entry tab.")
-    else:
-        # Time period selection
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            period = st.radio("Select Period", ["All Time", "This Week", "This Month"], horizontal=False)
-        
-        # Map period selection to filter code
-        period_filter = 'all'
-        if period == "This Week":
-            period_filter = 'week'
-            period_name = "Weekly"
-        elif period == "This Month":
-            period_filter = 'month'
-            period_name = "Monthly"
+        if uploaded_file is not None:
+            data = load_data_from_csv(uploaded_file)
+            st.success(f"Loaded {len(data)} records from CSV file.")
         else:
-            period_name = "All-Time"
+            data = st.session_state.financial_data
         
-        # Filter data based on period
-        filtered_data = filter_data_by_period(data, period_filter)
-        
-        # Generate and display summary statistics
-        summary = generate_summary(filtered_data, period_filter)
-        
-        with col2:
-            st.subheader(f"{period_name} Performance Summary")
-            metric_col1, metric_col2, metric_col3 = st.columns(3)
+        if data.empty:
+            st.info("No historical data available. Please upload a CSV file or add entries in the Daily Entry tab.")
+        else:
+            # Time period selection
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                period = st.radio("Select Period", ["All Time", "This Week", "This Month"], horizontal=False)
             
-            with metric_col1:
-                st.metric("Total Revenue", f"₦{summary.get('Total Revenue', 0):,.2f}")
-            with metric_col2:
-                st.metric("Total Orders", f"{summary.get('Total Orders', 0)}")
-            with metric_col3:
-                st.metric("Avg Order Value", f"₦{summary.get('Average Order Value', 0):,.2f}")
-        
-        # Display data table
-        st.markdown("---")
-        st.subheader("Financial Records")
-        
-        # Prepare display columns and format data
-        display_df = filtered_data.copy()
-        if not display_df.empty and 'Date' in display_df.columns:
-            display_df['Date'] = display_df['Date'].dt.strftime('%b %d, %Y')
-        
-        # Sort by date (newest first)
-        if not display_df.empty and 'Date' in display_df.columns:
-            display_df = display_df.sort_values('Date', ascending=False)
-        
-        # Show the data
-        st.dataframe(display_df)
-        
-        # Export functionality
-        st.markdown("---")
-        st.subheader("Export Data")
-        
-        export_tab1, export_tab2, export_tab3 = st.tabs(["Current Period", "Custom Date Range", "All Data"])
-        
-        with export_tab1:
-            st.write(f"Export {period_name} Data ({len(filtered_data)} records)")
+            # Map period selection to filter code
+            period_filter = 'all'
+            if period == "This Week":
+                period_filter = 'week'
+                period_name = "Weekly"
+            elif period == "This Month":
+                period_filter = 'month'
+                period_name = "Monthly"
+            else:
+                period_name = "All-Time"
             
-            export_col1, export_col2 = st.columns(2)
-            with export_col1:
-                if not filtered_data.empty:
-                    csv = filtered_data.to_csv(index=False)
-                    st.download_button(
-                        label=f"Download {period_name} Report (CSV)",
-                        data=csv,
-                        file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.csv",
-                        mime="text/csv"
-                    )
+            # Filter data based on period
+            filtered_data = filter_data_by_period(data, period_filter)
             
-            with export_col2:
-                if not filtered_data.empty:
-                    # Create Excel file
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                        filtered_data.to_excel(writer, sheet_name='Financial Data', index=False)
-                    excel_data = output.getvalue()
-                    st.download_button(
-                        label=f"Download {period_name} Report (Excel)",
-                        data=excel_data,
-                        file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.xlsx", 
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                    
-        with export_tab2:
-            st.write("Export Data for Custom Date Range")
+            # Generate and display summary statistics
+            summary = generate_summary(filtered_data, period_filter)
             
-            # Custom date range selector
-            if not data.empty and 'Date' in data.columns:
-                min_date = data['Date'].min()
-                max_date = data['Date'].max()
+            with col2:
+                st.subheader(f"{period_name} Performance Summary")
+                metric_col1, metric_col2, metric_col3 = st.columns(3)
                 
-                date_col1, date_col2 = st.columns(2)
-                with date_col1:
-                    start_date = st.date_input("Start Date", min_date)
-                with date_col2:
-                    end_date = st.date_input("End Date", max_date)
-                
-                # Filter data by selected date range
-                custom_filtered = data[(data['Date'] >= pd.Timestamp(start_date)) & 
-                                      (data['Date'] <= pd.Timestamp(end_date))]
-                
-                st.write(f"Selected range contains {len(custom_filtered)} records")
+                with metric_col1:
+                    st.metric("Total Revenue", f"₦{summary.get('Total Revenue', 0):,.2f}")
+                with metric_col2:
+                    st.metric("Total Orders", f"{summary.get('Total Orders', 0)}")
+                with metric_col3:
+                    st.metric("Avg Order Value", f"₦{summary.get('Average Order Value', 0):,.2f}")
+            
+            # Display data table
+            st.markdown("---")
+            st.subheader("Financial Records")
+            
+            # Prepare display columns and format data
+            display_df = filtered_data.copy()
+            if not display_df.empty and 'Date' in display_df.columns:
+                display_df['Date'] = display_df['Date'].dt.strftime('%b %d, %Y')
+            
+            # Sort by date (newest first)
+            if not display_df.empty and 'Date' in display_df.columns:
+                display_df = display_df.sort_values('Date', ascending=False)
+            
+            # Show the data
+            st.dataframe(display_df)
+            
+            # Export functionality
+            st.markdown("---")
+            st.subheader("Export Data")
+            
+            export_tab1, export_tab2, export_tab3 = st.tabs(["Current Period", "Custom Date Range", "All Data"])
+            
+            with export_tab1:
+                st.write(f"Export {period_name} Data ({len(filtered_data)} records)")
                 
                 export_col1, export_col2 = st.columns(2)
                 with export_col1:
-                    if not custom_filtered.empty:
-                        csv = custom_filtered.to_csv(index=False)
+                    if not filtered_data.empty:
+                        csv = filtered_data.to_csv(index=False)
                         st.download_button(
-                            label="Download Custom Range (CSV)",
+                            label=f"Download {period_name} Report (CSV)",
                             data=csv,
-                            file_name=f"foobr_financial_data_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.csv",
+                            file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.csv",
                             mime="text/csv"
                         )
                 
                 with export_col2:
-                    if not custom_filtered.empty:
+                    if not filtered_data.empty:
                         # Create Excel file
                         output = io.BytesIO()
                         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                            custom_filtered.to_excel(writer, sheet_name='Financial Data', index=False)
+                            filtered_data.to_excel(writer, sheet_name='Financial Data', index=False)
                         excel_data = output.getvalue()
                         st.download_button(
-                            label="Download Custom Range (Excel)",
+                            label=f"Download {period_name} Report (Excel)",
                             data=excel_data,
-                            file_name=f"foobr_financial_data_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.xlsx", 
+                            file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.xlsx", 
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
-        
-        with export_tab3:
-            st.write(f"Export All Financial Data ({len(data)} records)")
-            
-            export_col1, export_col2 = st.columns(2)
-            with export_col1:
-                if not data.empty:
-                    csv = data.to_csv(index=False)
-                    st.download_button(
-                        label="Download All Data (CSV)",
-                        data=csv,
-                        file_name="foobr_financial_data_all.csv",
-                        mime="text/csv"
-                    )
-            
-            with export_col2:
-                if not data.empty:
-                    # Create Excel file
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                        data.to_excel(writer, sheet_name='Financial Data', index=False)
-                    excel_data = output.getvalue()
-                    st.download_button(
-                        label="Download All Data (Excel)",
-                        data=excel_data,
-                        file_name="foobr_financial_data_all.xlsx", 
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                        
+            with export_tab2:
+                st.write("Export Data for Custom Date Range")
+                
+                # Custom date range selector
+                if not data.empty and 'Date' in data.columns:
+                    min_date = data['Date'].min()
+                    max_date = data['Date'].max()
                     
+                    date_col1, date_col2 = st.columns(2)
+                    with date_col1:
+                        start_date = st.date_input("Start Date", min_date)
+                    with date_col2:
+                        end_date = st.date_input("End Date", max_date)
+                    
+                    # Filter data by selected date range
+                    custom_filtered = data[(data['Date'] >= pd.Timestamp(start_date)) & 
+                                          (data['Date'] <= pd.Timestamp(end_date))]
+                    
+                    st.write(f"Selected range contains {len(custom_filtered)} records")
+                    
+                    export_col1, export_col2 = st.columns(2)
+                    with export_col1:
+                        if not custom_filtered.empty:
+                            csv = custom_filtered.to_csv(index=False)
+                            st.download_button(
+                                label="Download Custom Range (CSV)",
+                                data=csv,
+                                file_name=f"foobr_financial_data_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.csv",
+                                mime="text/csv"
+                            )
+                    
+                    with export_col2:
+                        if not custom_filtered.empty:
+                            # Create Excel file
+                            output = io.BytesIO()
+                            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                                custom_filtered.to_excel(writer, sheet_name='Financial Data', index=False)
+                            excel_data = output.getvalue()
+                            st.download_button(
+                                label="Download Custom Range (Excel)",
+                                data=excel_data,
+                                file_name=f"foobr_financial_data_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.xlsx", 
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+            
+            with export_tab3:
+                st.write(f"Export All Financial Data ({len(data)} records)")
+                
+                export_col1, export_col2 = st.columns(2)
+                with export_col1:
+                    if not data.empty:
+                        csv = data.to_csv(index=False)
+                        st.download_button(
+                            label="Download All Data (CSV)",
+                            data=csv,
+                            file_name="foobr_financial_data_all.csv",
+                            mime="text/csv"
+                        )
+                
+                with export_col2:
+                    if not data.empty:
+                        # Create Excel file
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                            data.to_excel(writer, sheet_name='Financial Data', index=False)
+                        excel_data = output.getvalue()
+                        st.download_button(
+                            label="Download All Data (Excel)",
+                            data=excel_data,
+                            file_name="foobr_financial_data_all.xlsx", 
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                        
 # Run the application
 if __name__ == "__main__":
     main()
