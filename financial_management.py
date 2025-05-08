@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime
 import io
+import os
+import json
 
 # Set page configuration
 st.set_page_config(
@@ -10,6 +12,36 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Data persistence functions
+def save_data_to_file(data):
+    """Save DataFrame to local file for persistence."""
+    # Convert to records format for simpler serialization
+    if not data.empty:
+        records = data.to_dict('records')
+        with open('foobr_financial_data.json', 'w') as f:
+            json.dump(records, f)
+    else:
+        # Create empty file if no data
+        with open('foobr_financial_data.json', 'w') as f:
+            json.dump([], f)
+            
+def load_data_from_file():
+    """Load DataFrame from local file."""
+    try:
+        if os.path.exists('foobr_financial_data.json'):
+            with open('foobr_financial_data.json', 'r') as f:
+                records = json.load(f)
+            
+            if records:
+                df = pd.DataFrame(records)
+                if 'Date' in df.columns:
+                    df['Date'] = pd.to_datetime(df['Date'])
+                return df
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+    
+    return pd.DataFrame()
 
 # Add minimal CSS for the black, grey, and white theme
 st.markdown("""
@@ -126,7 +158,10 @@ def save_to_csv(data_dict, report_date):
             # Append new entry
             st.session_state.financial_data = pd.concat([existing_data, df], ignore_index=True)
     
-    # Make sure we save the updated data to CSV
+    # Save to persistent storage
+    save_data_to_file(st.session_state.financial_data)
+    
+    # Return CSV data for download
     csv_data = st.session_state.financial_data.to_csv(index=False)
     
     return csv_data
@@ -210,12 +245,12 @@ def main():
     # Display app title
     st.markdown("<h1 class='main-header'>Foobr Financial Dashboard</h1>", unsafe_allow_html=True)
     
-    # Top navigation using tabs instead of sidebar
-    tab1, tab2 = st.tabs(["Daily Entry", "Historical Data"])
-    
-    # Initialize session state for financial data if not exists
+    # Load persistent data into session state
     if 'financial_data' not in st.session_state:
-        st.session_state.financial_data = pd.DataFrame()
+        st.session_state.financial_data = load_data_from_file()
+    
+    # Top navigation using tabs instead of sidebar
+    tab1, tab2 = st.tabs(["Daily Entry", "Saved Financial Records"])
     
     # Daily Entry Page
     with tab1:
@@ -349,7 +384,7 @@ def main():
         
         # Get data from session state (saved financial records)
         data = st.session_state.financial_data
-        
+                
         # Option to upload previous records
         with st.expander("Upload Previous Records"):
             uploaded_file = st.file_uploader("Upload financial data CSV", type="csv")
@@ -360,8 +395,16 @@ def main():
                         st.session_state.financial_data = imported_data
                     else:
                         st.session_state.financial_data = pd.concat([st.session_state.financial_data, imported_data]).drop_duplicates(subset=['Date']).reset_index(drop=True)
+                    # Save to persistent storage
+                    save_data_to_file(st.session_state.financial_data)
                     data = st.session_state.financial_data
                     st.success(f"Loaded {len(imported_data)} records from CSV file.")
+        
+        # Button to refresh data (useful for testing)
+        if st.button("Refresh Data"):
+            st.session_state.financial_data = load_data_from_file()
+            data = st.session_state.financial_data
+            st.success("Data refreshed!")
         
         if data.empty:
             st.info("No financial records found. Add entries in the Daily Entry tab to see them here.")
@@ -387,6 +430,7 @@ def main():
             
             with summary_col1:
                 st.markdown("#### This Week")
+                st.metric("Records", len(weekly_data))
                 st.metric("Revenue", f"₦{weekly_summary.get('Total Revenue', 0):,.2f}")
                 st.metric("Orders", f"{weekly_summary.get('Total Orders', 0)}")
                 with st.container():
@@ -402,6 +446,7 @@ def main():
             
             with summary_col2:
                 st.markdown("#### This Month")
+                st.metric("Records", len(monthly_data))
                 st.metric("Revenue", f"₦{monthly_summary.get('Total Revenue', 0):,.2f}")
                 st.metric("Orders", f"{monthly_summary.get('Total Orders', 0)}")
                 with st.container():
@@ -417,6 +462,7 @@ def main():
             
             with summary_col3:
                 st.markdown("#### All Time")
+                st.metric("Records", len(data))
                 st.metric("Revenue", f"₦{all_time_summary.get('Total Revenue', 0):,.2f}")
                 st.metric("Orders", f"{all_time_summary.get('Total Orders', 0)}")
                 with st.container():
