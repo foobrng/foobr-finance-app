@@ -333,8 +333,9 @@ def main():
                 save_button = st.button("Save Record", use_container_width=True)
                 
                 if save_button:
+                    # Save the data in session state
                     csv_data = save_to_csv(save_data, report_date)
-                    st.success(f"Data for {report_date.strftime('%B %d, %Y')} saved successfully!")
+                    st.success(f"Data for {report_date.strftime('%B %d, %Y')} saved successfully! View in Historical Data tab.")
                     st.download_button(
                         label="Download Daily Report",
                         data=csv_data,
@@ -344,84 +345,103 @@ def main():
     
     # Historical Data Page
     with tab2:
-        st.markdown("<h3 class='subheader'>Historical Financial Data</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 class='subheader'>Saved Financial Records</h3>", unsafe_allow_html=True)
         
-        # File uploader for CSV
-        uploaded_file = st.file_uploader("Upload financial data CSV", type="csv")
+        # Get data from session state (saved financial records)
+        data = st.session_state.financial_data
         
-        if uploaded_file is not None:
-            data = load_data_from_csv(uploaded_file)
-            st.success(f"Loaded {len(data)} records from CSV file.")
-        else:
-            data = st.session_state.financial_data
+        # Option to upload previous records
+        with st.expander("Upload Previous Records"):
+            uploaded_file = st.file_uploader("Upload financial data CSV", type="csv")
+            if uploaded_file is not None:
+                imported_data = load_data_from_csv(uploaded_file)
+                if not imported_data.empty:
+                    if 'financial_data' not in st.session_state or st.session_state.financial_data.empty:
+                        st.session_state.financial_data = imported_data
+                    else:
+                        st.session_state.financial_data = pd.concat([st.session_state.financial_data, imported_data]).drop_duplicates(subset=['Date']).reset_index(drop=True)
+                    data = st.session_state.financial_data
+                    st.success(f"Loaded {len(imported_data)} records from CSV file.")
         
         if data.empty:
-            st.info("No historical data available. Please upload a CSV file or add entries in the Daily Entry tab.")
+            st.info("No financial records found. Add entries in the Daily Entry tab to see them here.")
         else:
-            # Simple period selector
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                period = st.radio("Select Period", ["All Time", "This Week", "This Month"])
+            # Display data summaries by period
+            st.markdown("### Financial Records Summary")
             
-            # Map period selection to filter code
-            period_filter = 'all'
-            if period == "This Week":
-                period_filter = 'week'
-                period_name = "Weekly"
-            elif period == "This Month":
-                period_filter = 'month'
-                period_name = "Monthly"
-            else:
-                period_name = "All-Time"
-            
-            # Filter data based on period
-            filtered_data = filter_data_by_period(data, period_filter)
-            
-            # Generate and display summary statistics
-            summary = generate_summary(filtered_data, period_filter)
-            
-            with col2:
-                st.markdown(f"### {period_name} Performance Summary")
-                metric_col1, metric_col2, metric_col3 = st.columns(3)
+            # Ensure Date column is datetime
+            if 'Date' in data.columns and not pd.api.types.is_datetime64_any_dtype(data['Date']):
+                data['Date'] = pd.to_datetime(data['Date'])
                 
-                with metric_col1:
-                    st.metric("Total Revenue", f"₦{summary.get('Total Revenue', 0):,.2f}")
-                with metric_col2:
-                    st.metric("Total Orders", f"{summary.get('Total Orders', 0)}")
-                with metric_col3:
-                    st.metric("Avg Order Value", f"₦{summary.get('Average Order Value', 0):,.2f}")
+            # Get weekly and monthly data
+            weekly_data = filter_data_by_period(data, 'week')
+            monthly_data = filter_data_by_period(data, 'month')
             
-            # Display data table
+            # Generate summaries
+            all_time_summary = generate_summary(data)
+            weekly_summary = generate_summary(weekly_data)
+            monthly_summary = generate_summary(monthly_data)
+            
+            # Display summary tiles
+            summary_col1, summary_col2, summary_col3 = st.columns(3)
+            
+            with summary_col1:
+                st.markdown("#### This Week")
+                st.metric("Revenue", f"₦{weekly_summary.get('Total Revenue', 0):,.2f}")
+                st.metric("Orders", f"{weekly_summary.get('Total Orders', 0)}")
+                with st.container():
+                    if not weekly_data.empty:
+                        weekly_csv = weekly_data.to_csv(index=False)
+                        st.download_button(
+                            label="Export Weekly Records (CSV)",
+                            data=weekly_csv,
+                            file_name=f"foobr_financial_data_weekly.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+            
+            with summary_col2:
+                st.markdown("#### This Month")
+                st.metric("Revenue", f"₦{monthly_summary.get('Total Revenue', 0):,.2f}")
+                st.metric("Orders", f"{monthly_summary.get('Total Orders', 0)}")
+                with st.container():
+                    if not monthly_data.empty:
+                        monthly_csv = monthly_data.to_csv(index=False)
+                        st.download_button(
+                            label="Export Monthly Records (CSV)",
+                            data=monthly_csv,
+                            file_name=f"foobr_financial_data_monthly.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+            
+            with summary_col3:
+                st.markdown("#### All Time")
+                st.metric("Revenue", f"₦{all_time_summary.get('Total Revenue', 0):,.2f}")
+                st.metric("Orders", f"{all_time_summary.get('Total Orders', 0)}")
+                with st.container():
+                    if not data.empty:
+                        all_csv = data.to_csv(index=False)
+                        st.download_button(
+                            label="Export All Records (CSV)",
+                            data=all_csv,
+                            file_name=f"foobr_financial_data_all.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+            
+            # Display all records in a table
             st.markdown("---")
-            st.subheader("Financial Records")
+            st.subheader("All Financial Records")
             
-            # Prepare display columns and format data
-            display_df = filtered_data.copy()
+            # Format display data
+            display_df = data.copy()
             if not display_df.empty and 'Date' in display_df.columns:
                 display_df['Date'] = display_df['Date'].dt.strftime('%b %d, %Y')
-            
-            # Sort by date (newest first)
-            if not display_df.empty and 'Date' in display_df.columns:
                 display_df = display_df.sort_values('Date', ascending=False)
             
-            # Show the data
+            # Show the data table
             st.dataframe(display_df)
-            
-            # Export functionality
-            st.markdown("---")
-            col_export1, col_export2 = st.columns(2)
-            
-            with col_export1:
-                st.subheader("Export Data")
-                if not filtered_data.empty:
-                    csv = filtered_data.to_csv(index=False)
-                    st.download_button(
-                        label=f"Download {period_name} Report (CSV)",
-                        data=csv,
-                        file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
             
 # Run the application
 if __name__ == "__main__":
