@@ -398,17 +398,21 @@ def main():
             # Save button after calculations
             with col_btn2:
                 save_button = st.button("Save Record", use_container_width=True)
-                
-                if save_button:
-                    # Save the data in session state
-                    csv_data = save_to_csv(save_data, report_date)
-                    st.success(f"Data for {report_date.strftime('%B %d, %Y')} saved successfully! View in Saved Financial Records tab.")
-                    st.download_button(
-                        label="Download Daily Report",
-                        data=csv_data,
-                        file_name=f"foobr_financial_data_{report_date.strftime('%Y-%m-%d')}.csv",
-                        mime="text/csv"
-                    )
+
+            # Always allow save if `results` and `save_data` exist
+            if save_button and 'save_data' in locals() and 'results' in locals():
+                csv_data = save_to_csv(save_data, report_date)
+                st.session_state.financial_data = load_data_from_file()  # Refresh session state from file
+                st.success(f"✅ Data for {report_date.strftime('%B %d, %Y')} saved successfully!")
+                st.download_button(
+                    label="⬇️ Download Daily Report",
+                    data=csv_data,
+                    file_name=f"foobr_financial_data_{report_date.strftime('%Y-%m-%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            elif save_button:
+                st.warning("⚠️ Please calculate first before saving.")
     
     # Historical Data Page
     with tab2:
