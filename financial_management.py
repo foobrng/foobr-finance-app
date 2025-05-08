@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import datetime
 import io
 
@@ -50,39 +49,15 @@ def calculate_financials(starting_balance, bike_repairs, fuel, airtime,
     average_order_value = revenue / orders if orders > 0 else 0
 
     return {
-        "Balance After Repairs (Y)": balance_after_repairs,
+        "Balance After Repairs": balance_after_repairs,
         "Total Daily Expenses": total_expenses,
-        "Balance After Expenses (Z)": balance_after_expenses,
-        "Food Purchased (G)": food_purchased,
-        "Closing Balance (O)": closing_balance,
+        "Balance After Expenses": balance_after_expenses,
+        "Food Purchased": food_purchased,
+        "Closing Balance": closing_balance,
         "Revenue": revenue,
         "Orders": orders,
         "Average Order Value": average_order_value
     }
-
-def visualize_expenses(bike_repairs, fuel, airtime, food_purchased):
-    """Create a simple visualization of expenses."""
-    expense_data = {
-        'Category': ['Bike Repairs', 'Fuel', 'Airtime', 'Food Purchased'],
-        'Amount': [bike_repairs, fuel, airtime, food_purchased]
-    }
-    expense_df = pd.DataFrame(expense_data)
-    
-    fig, ax = plt.subplots()
-    bars = ax.bar(expense_df['Category'], expense_df['Amount'], color=['#ff9999', '#66b3ff', '#99ff99', '#ffcc99'])
-    ax.set_title('Expense Breakdown')
-    ax.set_ylabel('Amount (₦)')
-    plt.xticks(rotation=45)
-    
-    # Add value labels on top of bars
-    for bar in bars:
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height + 5,
-                f'₦{height:,.0f}',
-                ha='center', va='bottom', rotation=0, size=8)
-    
-    plt.tight_layout()
-    return fig
 
 # Save data to CSV
 def save_to_csv(data_dict, report_date):
@@ -100,11 +75,11 @@ def save_to_csv(data_dict, report_date):
         'End of Day Balance': data_dict['End of Day Balance'],
         'Payout': data_dict['Payout'],
         'Orders': data_dict['Orders'],
-        'Balance After Repairs': data_dict['Balance After Repairs (Y)'],
+        'Balance After Repairs': data_dict['Balance After Repairs'],
         'Total Expenses': data_dict['Total Daily Expenses'],
-        'Balance After Expenses': data_dict['Balance After Expenses (Z)'],
-        'Food Purchased': data_dict['Food Purchased (G)'],
-        'Closing Balance': data_dict['Closing Balance (O)'],
+        'Balance After Expenses': data_dict['Balance After Expenses'],
+        'Food Purchased': data_dict['Food Purchased'],
+        'Closing Balance': data_dict['Closing Balance'],
         'Revenue': data_dict['Revenue'],
         'Average Order Value': data_dict['Average Order Value']
     }])
@@ -139,10 +114,20 @@ def load_data_from_csv(uploaded_file):
     return df
 
 # Generate summary statistics
-def generate_summary(data):
+def generate_summary(data, period=None):
     """Generate basic summary statistics."""
     if data.empty:
         return {}
+    
+    # Filter by period if specified
+    if period == 'week':
+        today = pd.Timestamp.today()
+        start_of_week = today - pd.Timedelta(days=today.dayofweek)
+        data = data[data['Date'] >= start_of_week]
+    elif period == 'month':
+        today = pd.Timestamp.today()
+        start_of_month = today.replace(day=1)
+        data = data[data['Date'] >= start_of_month]
     
     summary = {
         'Total Revenue': data['Revenue'].sum(),
@@ -169,25 +154,25 @@ def visualize_trends(data):
     # Sort by date
     data = data.sort_values('Date')
     
-    # Create figure with revenue and orders trends
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+    # Create weekly and monthly aggregations
+    data['Week'] = data['Date'].dt.strftime('%Y-%U')
+    data['Month'] = data['Date'].dt.strftime('%Y-%m')
     
-    # Revenue trend
-    ax1.plot(data['Date'], data['Revenue'], 'b-', marker='o')
-    ax1.set_title('Daily Revenue Trend')
-    ax1.set_ylabel('Revenue (₦)')
-    ax1.tick_params(axis='x', rotation=45)
-    ax1.grid(True, linestyle='--', alpha=0.7)
+    weekly_data = data.groupby('Week').agg({
+        'Revenue': 'sum',
+        'Orders': 'sum'
+    }).reset_index()
     
-    # Orders trend
-    ax2.plot(data['Date'], data['Orders'], 'g-', marker='s')
-    ax2.set_title('Daily Orders Trend')
-    ax2.set_ylabel('Number of Orders')
-    ax2.tick_params(axis='x', rotation=45)
-    ax2.grid(True, linestyle='--', alpha=0.7)
+    monthly_data = data.groupby('Month').agg({
+        'Revenue': 'sum',
+        'Orders': 'sum'
+    }).reset_index()
     
-    plt.tight_layout()
-    return fig
+    return {
+        'daily': data,
+        'weekly': weekly_data,
+        'monthly': monthly_data
+    }
 
 # Main application
 def main():
@@ -209,23 +194,32 @@ def main():
         
         # Input form in the sidebar
         st.sidebar.markdown("### Step 1: Starting Values")
-        starting_balance = st.sidebar.number_input("Starting Balance (X)", 
-                                                value=478411)
+        starting_balance = st.sidebar.number_input("Starting Balance", 
+                                                help="Total amount of money from the day before",
+                                                value=0.0)
         bike_repairs = st.sidebar.number_input("Bike Repairs & Company Expenses", 
-                                            value=22500)
+                                            help="Any expenses aside from fuel and airtime",
+                                            value=0.0)
 
         st.sidebar.markdown("### Step 2: Daily Expenses")
-        fuel = st.sidebar.number_input("Fuel", value=10000)
-        airtime = st.sidebar.number_input("Airtime", value=1000)
+        fuel = st.sidebar.number_input("Fuel", 
+                                    help="Daily fuel expenses for delivery vehicles",
+                                    value=0.0)
+        airtime = st.sidebar.number_input("Airtime", 
+                                       help="Daily communication expenses",
+                                       value=0.0)
 
         st.sidebar.markdown("### Step 3: End of Day Values")
-        end_of_day_balance = st.sidebar.number_input("Balance Remaining (U)", 
-                                                  value=149472)
+        end_of_day_balance = st.sidebar.number_input("Balance Remaining", 
+                                                  help="Balance remaining in all accounts after daily expenditures",
+                                                  value=0.0)
         payout = st.sidebar.number_input("Payout from Paystack", 
-                                      value=353600)
+                                      help="Total payments received through Paystack",
+                                      value=0.0)
         orders = st.sidebar.number_input("Number of Orders", 
+                                      help="Total number of orders fulfilled today",
                                       min_value=0,
-                                      value=75)
+                                      value=0)
 
         calculate_button = st.sidebar.button("Calculate", use_container_width=True)
         
@@ -267,53 +261,45 @@ def main():
             flow_col1, flow_col2, flow_col3 = st.columns(3)
             
             with flow_col1:
-                st.info(f"**Starting Balance (X)**\n₦{starting_balance:,.2f}")
+                st.info(f"**Starting Balance**\n₦{starting_balance:,.2f}")
                 st.error(f"**- Bike Repairs**\n₦{bike_repairs:,.2f}")
-                st.success(f"**= Balance After Repairs (Y)**\n₦{results['Balance After Repairs (Y)']:,.2f}")
+                st.success(f"**= Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
                 
             with flow_col2:
-                st.info(f"**Balance After Repairs (Y)**\n₦{results['Balance After Repairs (Y)']:,.2f}")
+                st.info(f"**Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
                 st.error(f"**- Fuel + Airtime**\n₦{results['Total Daily Expenses']:,.2f}")
-                st.success(f"**= Balance After Expenses (Z)**\n₦{results['Balance After Expenses (Z)']:,.2f}")
+                st.success(f"**= Balance After Expenses**\n₦{results['Balance After Expenses']:,.2f}")
                 
             with flow_col3:
-                st.info(f"**Balance After Expenses (Z)**\n₦{results['Balance After Expenses (Z)']:,.2f}")
-                st.error(f"**- End of Day Balance (U)**\n₦{end_of_day_balance:,.2f}")
-                st.success(f"**= Food Purchased (G)**\n₦{results['Food Purchased (G)']:,.2f}")
+                st.info(f"**Balance After Expenses**\n₦{results['Balance After Expenses']:,.2f}")
+                st.error(f"**- End of Day Balance**\n₦{end_of_day_balance:,.2f}")
+                st.success(f"**= Food Purchased**\n₦{results['Food Purchased']:,.2f}")
             
             st.markdown("---")
             st.subheader("Final Results")
             final_col1, final_col2 = st.columns(2)
             
             with final_col1:
-                st.info(f"**End of Day Balance (U)**\n₦{end_of_day_balance:,.2f}")
+                st.info(f"**End of Day Balance**\n₦{end_of_day_balance:,.2f}")
                 st.success(f"**+ Paystack Payout**\n₦{payout:,.2f}")
-                st.warning(f"**= Closing Balance (O)**\n₦{results['Closing Balance (O)']:,.2f}")
+                st.warning(f"**= Closing Balance**\n₦{results['Closing Balance']:,.2f}")
                 
             with final_col2:
-                st.info(f"**Closing Balance (O)**\n₦{results['Closing Balance (O)']:,.2f}")
-                st.error(f"**- Balance After Repairs (Y)**\n₦{results['Balance After Repairs (Y)']:,.2f}")
+                st.info(f"**Closing Balance**\n₦{results['Closing Balance']:,.2f}")
+                st.error(f"**- Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
                 st.success(f"**= Revenue**\n₦{results['Revenue']:,.2f}")
-            
-            # Expense breakdown chart
-            st.markdown("---")
-            st.subheader("Expense Breakdown")
-            fig = visualize_expenses(bike_repairs, fuel, airtime, results['Food Purchased (G)'])
-            st.pyplot(fig)
             
             # Save data
             st.markdown("---")
             st.subheader("Save Data")
             
-            if st.button("Save to CSV"):
-                csv_data = save_to_csv(save_data, report_date)
-                st.download_button(
-                    label="Download CSV",
-                    data=csv_data,
-                    file_name=f"foobr_financial_data_{report_date.strftime('%Y-%m-%d')}.csv",
-                    mime="text/csv"
-                )
-                st.success("Data saved! You can download the CSV file.")
+            csv_data = save_to_csv(save_data, report_date)
+            st.download_button(
+                label="Download Daily Report",
+                data=csv_data,
+                file_name=f"foobr_financial_data_{report_date.strftime('%Y-%m-%d')}.csv",
+                mime="text/csv"
+            )
     
     # Historical Data Page
     elif app_mode == "Historical Data":
@@ -331,10 +317,29 @@ def main():
         if data.empty:
             st.info("No historical data available. Please upload a CSV file or add entries in the Daily Entry tab.")
         else:
-            # Show summary statistics
-            summary = generate_summary(data)
+            # Period selection
+            period = st.radio("Select Period", ["All Time", "This Week", "This Month"], horizontal=True)
             
-            st.subheader("Performance Summary")
+            # Filter data based on period
+            filtered_data = data.copy()
+            if period == "This Week":
+                today = pd.Timestamp.today()
+                start_of_week = today - pd.Timedelta(days=today.dayofweek)
+                filtered_data = filtered_data[filtered_data['Date'] >= start_of_week] 
+                summary = generate_summary(filtered_data, 'week')
+                period_name = "Weekly"
+            elif period == "This Month":
+                today = pd.Timestamp.today()
+                start_of_month = today.replace(day=1)
+                filtered_data = filtered_data[filtered_data['Date'] >= start_of_month]
+                summary = generate_summary(filtered_data, 'month')
+                period_name = "Monthly"
+            else:
+                summary = generate_summary(filtered_data)
+                period_name = "All-Time"
+            
+            # Show summary statistics
+            st.subheader(f"{period_name} Performance Summary")
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -349,7 +354,7 @@ def main():
             st.subheader("Financial Records")
             
             # Prepare display columns and format data
-            display_df = data.copy()
+            display_df = filtered_data.copy()
             if 'Date' in display_df.columns:
                 display_df['Date'] = display_df['Date'].dt.strftime('%b %d, %Y')
             
@@ -359,42 +364,36 @@ def main():
             # Show the data
             st.dataframe(display_df)
             
-            # Show trends if we have enough data
-            if len(data) >= 2:
-                st.markdown("---")
-                st.subheader("Financial Trends")
-                trend_fig = visualize_trends(data)
-                if trend_fig:
-                    st.pyplot(trend_fig)
-            
             # Export functionality
             st.markdown("---")
             st.subheader("Export Data")
             
+            export_period = st.radio("Export Period", ["All Data", "Current Selection"], horizontal=True)
+            export_data = data if export_period == "All Data" else filtered_data
+            
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("Export as CSV"):
-                    csv = data.to_csv(index=False)
-                    st.download_button(
-                        label="Download CSV",
-                        data=csv,
-                        file_name="foobr_financial_data.csv",
-                        mime="text/csv"
-                    )
+                csv = export_data.to_csv(index=False)
+                st.download_button(
+                    label=f"Download {period_name} Report as CSV",
+                    data=csv,
+                    file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.csv",
+                    mime="text/csv"
+                )
             
             with col2:
-                if st.button("Export as Excel"):
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                        data.to_excel(writer, sheet_name='Financial Data', index=False)
-                    excel_data = output.getvalue()
-                    st.download_button(
-                        label="Download Excel",
-                        data=excel_data,
-                        file_name="foobr_financial_data.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                # Create Excel file
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    export_data.to_excel(writer, sheet_name='Financial Data', index=False)
+                excel_data = output.getvalue()
+                st.download_button(
+                    label=f"Download {period_name} Report as Excel",
+                    data=excel_data,
+                    file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
 # Run the application
 if __name__ == "__main__":
