@@ -11,116 +11,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Add enhanced CSS
+# Add basic CSS
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 2rem;
         font-weight: 700;
         color: #1E88E5;
         text-align: center;
-        margin-bottom: 1.5rem;
-        padding: 1rem 0;
-        background: linear-gradient(to right, #e6f2ff, #ffffff);
-        border-radius: 10px;
-    }
-    
-    .subheader {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: #0D47A1;
         margin-bottom: 1rem;
-    }
-    
-    .card {
-        background-color: #f9f9f9;
-        border-radius: 8px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        transition: transform 0.3s ease;
-        margin-bottom: 1rem;
-    }
-    
-    .card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
-    }
-    
-    .button-primary {
-        background-color: #1E88E5;
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 5px;
-        text-align: center;
-        margin: 0.5rem 0;
-        transition: all 0.3s ease;
-    }
-    
-    .button-primary:hover {
-        background-color: #0D47A1;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    }
-    
-    /* Make hamburger menu more visible */
-    [data-testid="collapsedControl"] {
-        width: 40px !important;
-        height: 40px !important;
-        background-color: #1E88E5 !important;
-        border-radius: 50% !important;
-        color: white !important;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
-        transform: translateX(5px) !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    [data-testid="collapsedControl"]:hover {
-        background-color: #0D47A1 !important;
-        transform: translateX(5px) scale(1.1) !important;
-    }
-    
-    /* Add animation to sidebar arrow */
-    @keyframes pulse {
-        0% { transform: translateX(5px) scale(1); }
-        50% { transform: translateX(5px) scale(1.1); }
-        100% { transform: translateX(5px) scale(1); }
-    }
-    
-    [data-testid="collapsedControl"] {
-        animation: pulse 2s infinite;
-    }
-    
-    /* Add better styling to navigation options */
-    div[data-testid="stRadio"] label {
-        background-color: #f0f7ff;
-        padding: 10px 15px;
-        border-radius: 6px;
-        transition: all 0.2s ease;
-        cursor: pointer;
-        margin: 5px 0;
-    }
-    
-    div[data-testid="stRadio"] label:hover {
-        background-color: #d0e6ff;
-    }
-    
-    /* Highlight the selected navigation option */
-    div[data-testid="stRadio"] [aria-checked="true"] {
-        background-color: #1E88E5 !important;
-        color: white !important;
-        font-weight: bold !important;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
-    }
-    
-    /* Improved metrics */
-    [data-testid="stMetric"] {
-        background-color: #f5f9ff;
-        border-radius: 8px;
-        padding: 1rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-    
-    [data-testid="stMetricLabel"] {
-        font-weight: bold !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -325,107 +224,26 @@ def load_data_from_csv(file):
         st.error(f"Error loading CSV file: {e}")
         return pd.DataFrame()
 
-# Check if this is the first run of the app
-def is_first_run():
-    if "first_run" not in st.session_state:
-        st.session_state.first_run = True
-        return True
-    return False
-
 # Main application
 def main():
     # Display app title
     st.markdown("<h1 class='main-header'>Foobr Financial Dashboard</h1>", unsafe_allow_html=True)
     
-    # Initialize session state for financial data if not exists
-    if 'financial_data' not in st.session_state:
-        st.session_state.financial_data = pd.DataFrame()
-    
-    # Check if first run to show welcome screen
-    first_run = is_first_run()
-    
     # Sidebar navigation
     st.sidebar.title("Navigation")
     app_mode = st.sidebar.radio("", ["Daily Entry", "Historical Data"])
     
-    # Add a visual hint to help find the sidebar
-    if first_run:
-        st.sidebar.markdown("##### 👈 Use this sidebar to navigate")
-        
-        # Show welcome message and navigation instructions
-        st.markdown("""
-        <div class="card">
-            <h2 style="color:#1E88E5; text-align:center;">Welcome to Foobr Financial Dashboard!</h2>
-            <p style="font-size:1.1rem; text-align:center;">Your all-in-one solution for tracking finances for your food delivery business</p>
-            <hr>
-            <h3 style="color:#0D47A1; margin-top:1rem;">Getting Started:</h3>
-            <ol style="font-size:1.1rem;">
-                <li><strong>Daily Entry</strong> - Record your daily financial data and track your business performance</li>
-                <li><strong>Historical Data</strong> - Analyze past performance and export reports</li>
-            </ol>
-            <p style="font-style:italic; margin-top:1rem;">Use the sidebar on the left to navigate between features</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Add quick action buttons
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("""
-            <div class="card" style="text-align:center; height:200px;">
-                <h3 style="color:#1E88E5;">Enter Today's Data</h3>
-                <p>Record your daily operations and track your financial performance</p>
-                <div class="button-primary">Start Daily Entry</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-            <div class="card" style="text-align:center; height:200px;">
-                <h3 style="color:#1E88E5;">View Reports</h3>
-                <p>Analyze historical data and export financial reports</p>
-                <div class="button-primary">View Historical Data</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        # Show key features overview
-        st.markdown("""
-        <div class="card" style="margin-top:1.5rem;">
-            <h3 style="color:#1E88E5; text-align:center;">Key Features</h3>
-            <div style="display:flex; justify-content:space-between; flex-wrap:wrap;">
-                <div style="flex:1; min-width:200px; margin:10px; text-align:center;">
-                    <h4>📊 Financial Tracking</h4>
-                    <p>Track daily revenue, expenses, and order metrics</p>
-                </div>
-                <div style="flex:1; min-width:200px; margin:10px; text-align:center;">
-                    <h4>💾 Data Storage</h4>
-                    <p>Save and access your historical financial records</p>
-                </div>
-                <div style="flex:1; min-width:200px; margin:10px; text-align:center;">
-                    <h4>📈 Performance Analysis</h4>
-                    <p>Visualize your business performance over time</p>
-                </div>
-                <div style="flex:1; min-width:200px; margin:10px; text-align:center;">
-                    <h4>📑 Export Reports</h4>
-                    <p>Generate and download CSV and Excel reports</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    # Initialize session state for financial data if not exists
+    if 'financial_data' not in st.session_state:
+        st.session_state.financial_data = pd.DataFrame()
     
     # Daily Entry Page
     if app_mode == "Daily Entry":
-        # Show sidebar help text
-        st.sidebar.markdown("""
-        <div style="background-color:#f0f7ff; padding:10px; border-radius:5px; margin-bottom:15px;">
-            <p style="margin:0; font-style:italic;">Enter your daily financial data to calculate key metrics</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
         # Add date selection
         report_date = st.sidebar.date_input("Report Date", datetime.date.today())
         
         # Input form in the sidebar
-        st.sidebar.markdown("<h3 style='color:#1E88E5;'>Step 1: Starting Values</h3>", unsafe_allow_html=True)
+        st.sidebar.markdown("### Step 1: Starting Values")
         starting_balance = st.sidebar.number_input("Starting Balance", 
                                                 help="Total amount of money from the day before",
                                                 value=0.0)
@@ -433,7 +251,7 @@ def main():
                                             help="Any expenses aside from fuel and airtime",
                                             value=0.0)
 
-        st.sidebar.markdown("<h3 style='color:#1E88E5;'>Step 2: Daily Expenses</h3>", unsafe_allow_html=True)
+        st.sidebar.markdown("### Step 2: Daily Expenses")
         fuel = st.sidebar.number_input("Fuel", 
                                     help="Daily fuel expenses for delivery vehicles",
                                     value=0.0)
@@ -441,7 +259,7 @@ def main():
                                        help="Daily communication expenses",
                                        value=0.0)
 
-        st.sidebar.markdown("<h3 style='color:#1E88E5;'>Step 3: End of Day Values</h3>", unsafe_allow_html=True)
+        st.sidebar.markdown("### Step 3: End of Day Values")
         end_of_day_balance = st.sidebar.number_input("Balance Remaining", 
                                                   help="Balance remaining in all accounts after daily expenditures",
                                                   value=0.0)
@@ -453,57 +271,8 @@ def main():
                                       min_value=0,
                                       value=0)
 
-        # Add style to the calculate button
-        st.sidebar.markdown("""
-        <style>
-        div.stButton > button {
-            background-color: #1E88E5;
-            color: white;
-            font-weight: bold;
-            border: none;
-            padding: 0.5rem 1rem;
-            width: 100%;
-            border-radius: 5px;
-            transition: all 0.3s ease;
-        }
-        div.stButton > button:hover {
-            background-color: #0D47A1;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
         calculate_button = st.sidebar.button("Calculate", use_container_width=True)
         
-        # Daily entry instructions if not calculated yet
-        if not calculate_button:
-            st.markdown("""
-            <div class="card">
-                <h2 style="color:#1E88E5; text-align:center;">Daily Financial Entry</h2>
-                <p style="font-size:1.1rem; text-align:center;">Record your daily financial metrics to track your business performance</p>
-                <hr>
-                <h3 style="color:#0D47A1; margin-top:1rem;">Instructions:</h3>
-                <ol style="font-size:1.1rem;">
-                    <li>Fill out all fields in the sidebar on the left</li>
-                    <li>Click "Calculate" to generate your daily financial summary</li>
-                    <li>Review your metrics and download your report if needed</li>
-                </ol>
-                <div style="background-color:#e6f2ff; padding:10px; border-radius:5px; margin-top:15px;">
-                    <p style="margin:0;"><strong>Tip:</strong> Make sure to record your data every day for the most accurate tracking of your business performance</p>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Show sample metrics visualization
-            st.markdown("<h3 class='subheader'>Sample Daily Summary Preview</h3>", unsafe_allow_html=True)
-            metric_col1, metric_col2, metric_col3 = st.columns(3)
-            with metric_col1:
-                st.metric("Revenue", "₦0.00", delta=None)
-            with metric_col2:
-                st.metric("Orders", "0", delta=None)
-            with metric_col3:
-                st.metric("Avg Order Value", "₦0.00", delta=None)
-            
         # Display the calculations
         if calculate_button:
             results = calculate_financials(
@@ -524,7 +293,7 @@ def main():
             save_data.update(results)
             
             # Display results 
-            st.markdown(f"<h2 class='subheader'>Daily Summary for {report_date.strftime('%B %d, %Y')}</h2>", unsafe_allow_html=True)
+            st.subheader(f"Daily Summary for {report_date.strftime('%B %d, %Y')}")
             
             # Show key metrics at the top
             metric_col1, metric_col2, metric_col3 = st.columns(3)
@@ -538,97 +307,43 @@ def main():
             st.markdown("---")
             
             # Create financial flow visualization
-            st.markdown("<h3 class='subheader'>Financial Flow</h3>", unsafe_allow_html=True)
+            st.subheader("Financial Flow")
             flow_col1, flow_col2, flow_col3 = st.columns(3)
             
             with flow_col1:
-                st.markdown("""
-                <div class="card">
-                    <h4 style="color:#1E88E5;">Starting Balance</h4>
-                    <p style="font-size:1.2rem; color:#000;">₦{:,.2f}</p>
-                    <p style="color:#d32f2f; font-weight:bold;">- Bike Repairs: ₦{:,.2f}</p>
-                    <hr>
-                    <h4 style="color:#388e3c;">Balance After Repairs: ₦{:,.2f}</h4>
-                </div>
-                """.format(starting_balance, bike_repairs, results['Balance After Repairs']), unsafe_allow_html=True)
+                st.info(f"**Starting Balance**\n₦{starting_balance:,.2f}")
+                st.error(f"**- Bike Repairs**\n₦{bike_repairs:,.2f}")
+                st.success(f"**= Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
                 
             with flow_col2:
-                st.markdown("""
-                <div class="card">
-                    <h4 style="color:#1E88E5;">Balance After Repairs</h4>
-                    <p style="font-size:1.2rem; color:#000;">₦{:,.2f}</p>
-                    <p style="color:#d32f2f; font-weight:bold;">- Expenses: ₦{:,.2f}</p>
-                    <hr>
-                    <h4 style="color:#388e3c;">Balance After Expenses: ₦{:,.2f}</h4>
-                </div>
-                """.format(results['Balance After Repairs'], results['Total Daily Expenses'], 
-                           results['Balance After Expenses']), unsafe_allow_html=True)
+                st.info(f"**Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
+                st.error(f"**- Fuel + Airtime**\n₦{results['Total Daily Expenses']:,.2f}")
+                st.success(f"**= Balance After Expenses**\n₦{results['Balance After Expenses']:,.2f}")
                 
             with flow_col3:
-                st.markdown("""
-                <div class="card">
-                    <h4 style="color:#1E88E5;">Balance After Expenses</h4>
-                    <p style="font-size:1.2rem; color:#000;">₦{:,.2f}</p>
-                    <p style="color:#d32f2f; font-weight:bold;">- End of Day: ₦{:,.2f}</p>
-                    <hr>
-                    <h4 style="color:#388e3c;">Food Purchased: ₦{:,.2f}</h4>
-                </div>
-                """.format(results['Balance After Expenses'], end_of_day_balance, 
-                           results['Food Purchased']), unsafe_allow_html=True)
+                st.info(f"**Balance After Expenses**\n₦{results['Balance After Expenses']:,.2f}")
+                st.error(f"**- End of Day Balance**\n₦{end_of_day_balance:,.2f}")
+                st.success(f"**= Food Purchased**\n₦{results['Food Purchased']:,.2f}")
             
             st.markdown("---")
-            st.markdown("<h3 class='subheader'>Final Results</h3>", unsafe_allow_html=True)
+            st.subheader("Final Results")
             final_col1, final_col2 = st.columns(2)
             
             with final_col1:
-                st.markdown("""
-                <div class="card">
-                    <h4 style="color:#1E88E5;">End of Day Balance</h4>
-                    <p style="font-size:1.2rem; color:#000;">₦{:,.2f}</p>
-                    <p style="color:#388e3c; font-weight:bold;">+ Paystack Payout: ₦{:,.2f}</p>
-                    <hr>
-                    <h4 style="color:#ff9800;">Closing Balance: ₦{:,.2f}</h4>
-                </div>
-                """.format(end_of_day_balance, payout, results['Closing Balance']), unsafe_allow_html=True)
+                st.info(f"**End of Day Balance**\n₦{end_of_day_balance:,.2f}")
+                st.success(f"**+ Paystack Payout**\n₦{payout:,.2f}")
+                st.warning(f"**= Closing Balance**\n₦{results['Closing Balance']:,.2f}")
                 
             with final_col2:
-                st.markdown("""
-                <div class="card">
-                    <h4 style="color:#1E88E5;">Closing Balance</h4>
-                    <p style="font-size:1.2rem; color:#000;">₦{:,.2f}</p>
-                    <p style="color:#d32f2f; font-weight:bold;">- Balance After Repairs: ₦{:,.2f}</p>
-                    <hr>
-                    <h4 style="color:#388e3c;">Revenue: ₦{:,.2f}</h4>
-                </div>
-                """.format(results['Closing Balance'], results['Balance After Repairs'], 
-                           results['Revenue']), unsafe_allow_html=True)
+                st.info(f"**Closing Balance**\n₦{results['Closing Balance']:,.2f}")
+                st.error(f"**- Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
+                st.success(f"**= Revenue**\n₦{results['Revenue']:,.2f}")
             
             # Save data
             st.markdown("---")
-            st.markdown("<h3 class='subheader'>Save Data</h3>", unsafe_allow_html=True)
+            st.subheader("Save Data")
             
             csv_data = save_to_csv(save_data, report_date)
-            
-            # Style download button
-            st.markdown("""
-            <style>
-            div.stDownloadButton > button {
-                background-color: #388e3c;
-                color: white;
-                font-weight: bold;
-                border: none;
-                padding: 0.5rem 1rem;
-                width: 100%;
-                border-radius: 5px;
-                transition: all 0.3s ease;
-            }
-            div.stDownloadButton > button:hover {
-                background-color: #2e7d32;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
             st.download_button(
                 label="Download Daily Report",
                 data=csv_data,
