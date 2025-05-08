@@ -8,18 +8,37 @@ st.set_page_config(
     page_title="Foobr Financial Dashboard",
     page_icon="💰",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Add basic CSS
+# Add minimal CSS for the black, grey, and white theme
 st.markdown("""
 <style>
     .main-header {
         font-size: 2rem;
         font-weight: 700;
-        color: #1E88E5;
+        color: #000000;
         text-align: center;
         margin-bottom: 1rem;
+    }
+    .subheader {
+        color: #333333;
+        font-weight: 600;
+    }
+    .stButton>button {
+        background-color: #333333;
+        color: white;
+    }
+    div.block-container {
+        padding-top: 2rem;
+    }
+    .metric-container {
+        background-color: #f5f5f5;
+        padding: 1rem;
+        border-radius: 5px;
+    }
+    .tab-content {
+        padding: 1rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -110,9 +129,6 @@ def save_to_csv(data_dict, report_date):
     # Make sure we save the updated data to CSV
     csv_data = st.session_state.financial_data.to_csv(index=False)
     
-    # Log success message
-    st.success(f"Data for {report_date.strftime('%B %d, %Y')} saved successfully!")
-    
     return csv_data
 
 # Generate summary statistics
@@ -140,41 +156,6 @@ def generate_summary(data, period=None):
     }
     
     return summary
-
-# Visualize trends
-def visualize_trends(data):
-    """Create visualizations of financial trends."""
-    if data.empty or len(data) < 2:  # Need at least 2 points for a trend
-        return None
-    
-    # Ensure Date column is datetime
-    if 'Date' in data.columns:
-        data['Date'] = pd.to_datetime(data['Date'])
-    else:
-        return None
-    
-    # Sort by date
-    data = data.sort_values('Date')
-    
-    # Create weekly and monthly aggregations
-    data['Week'] = data['Date'].dt.strftime('%Y-%U')
-    data['Month'] = data['Date'].dt.strftime('%Y-%m')
-    
-    weekly_data = data.groupby('Week').agg({
-        'Revenue': 'sum',
-        'Orders': 'sum'
-    }).reset_index()
-    
-    monthly_data = data.groupby('Month').agg({
-        'Revenue': 'sum',
-        'Orders': 'sum'
-    }).reset_index()
-    
-    return {
-        'daily': data,
-        'weekly': weekly_data,
-        'monthly': monthly_data
-    }
 
 def filter_data_by_period(data, period):
     """Filter DataFrame by selected time period.
@@ -229,49 +210,57 @@ def main():
     # Display app title
     st.markdown("<h1 class='main-header'>Foobr Financial Dashboard</h1>", unsafe_allow_html=True)
     
-    # Sidebar navigation
-    st.sidebar.title("Navigation")
-    app_mode = st.sidebar.radio("", ["Daily Entry", "Historical Data"])
+    # Top navigation using tabs instead of sidebar
+    tab1, tab2 = st.tabs(["Daily Entry", "Historical Data"])
     
     # Initialize session state for financial data if not exists
     if 'financial_data' not in st.session_state:
         st.session_state.financial_data = pd.DataFrame()
     
     # Daily Entry Page
-    if app_mode == "Daily Entry":
-        # Add date selection
-        report_date = st.sidebar.date_input("Report Date", datetime.date.today())
+    with tab1:
+        st.markdown("<h3 class='subheader'>Daily Financial Entry</h3>", unsafe_allow_html=True)
         
-        # Input form in the sidebar
-        st.sidebar.markdown("### Step 1: Starting Values")
-        starting_balance = st.sidebar.number_input("Starting Balance", 
-                                                help="Total amount of money from the day before",
+        # Add date selection
+        report_date = st.date_input("Report Date", datetime.date.today())
+        
+        # Create two columns for input form
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### Starting Values")
+            starting_balance = st.number_input("Starting Balance", 
+                                              help="Total amount of money from the day before",
+                                              value=0.0)
+            bike_repairs = st.number_input("Bike Repairs & Company Expenses", 
+                                          help="Any expenses aside from fuel and airtime",
+                                          value=0.0)
+
+            st.markdown("### Daily Expenses")
+            fuel = st.number_input("Fuel", 
+                                  help="Daily fuel expenses for delivery vehicles",
+                                  value=0.0)
+            airtime = st.number_input("Airtime", 
+                                     help="Daily communication expenses",
+                                     value=0.0)
+
+        with col2:
+            st.markdown("### End of Day Values")
+            end_of_day_balance = st.number_input("Balance Remaining", 
+                                                help="Balance remaining in all accounts after daily expenditures",
                                                 value=0.0)
-        bike_repairs = st.sidebar.number_input("Bike Repairs & Company Expenses", 
-                                            help="Any expenses aside from fuel and airtime",
-                                            value=0.0)
-
-        st.sidebar.markdown("### Step 2: Daily Expenses")
-        fuel = st.sidebar.number_input("Fuel", 
-                                    help="Daily fuel expenses for delivery vehicles",
+            payout = st.number_input("Payout from Paystack", 
+                                    help="Total payments received through Paystack",
                                     value=0.0)
-        airtime = st.sidebar.number_input("Airtime", 
-                                       help="Daily communication expenses",
-                                       value=0.0)
+            orders = st.number_input("Number of Orders", 
+                                    help="Total number of orders fulfilled today",
+                                    min_value=0,
+                                    value=0)
 
-        st.sidebar.markdown("### Step 3: End of Day Values")
-        end_of_day_balance = st.sidebar.number_input("Balance Remaining", 
-                                                  help="Balance remaining in all accounts after daily expenditures",
-                                                  value=0.0)
-        payout = st.sidebar.number_input("Payout from Paystack", 
-                                      help="Total payments received through Paystack",
-                                      value=0.0)
-        orders = st.sidebar.number_input("Number of Orders", 
-                                      help="Total number of orders fulfilled today",
-                                      min_value=0,
-                                      value=0)
-
-        calculate_button = st.sidebar.button("Calculate", use_container_width=True)
+        # Calculate and save buttons
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            calculate_button = st.button("Calculate", use_container_width=True)
         
         # Display the calculations
         if calculate_button:
@@ -311,49 +300,51 @@ def main():
             flow_col1, flow_col2, flow_col3 = st.columns(3)
             
             with flow_col1:
-                st.info(f"**Starting Balance**\n₦{starting_balance:,.2f}")
-                st.error(f"**- Bike Repairs**\n₦{bike_repairs:,.2f}")
-                st.success(f"**= Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
+                st.markdown(f"**Starting Balance**\n₦{starting_balance:,.2f}")
+                st.markdown(f"**- Bike Repairs**\n₦{bike_repairs:,.2f}")
+                st.markdown(f"**= Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
                 
             with flow_col2:
-                st.info(f"**Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
-                st.error(f"**- Fuel + Airtime**\n₦{results['Total Daily Expenses']:,.2f}")
-                st.success(f"**= Balance After Expenses**\n₦{results['Balance After Expenses']:,.2f}")
+                st.markdown(f"**Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
+                st.markdown(f"**- Fuel + Airtime**\n₦{results['Total Daily Expenses']:,.2f}")
+                st.markdown(f"**= Balance After Expenses**\n₦{results['Balance After Expenses']:,.2f}")
                 
             with flow_col3:
-                st.info(f"**Balance After Expenses**\n₦{results['Balance After Expenses']:,.2f}")
-                st.error(f"**- End of Day Balance**\n₦{end_of_day_balance:,.2f}")
-                st.success(f"**= Food Purchased**\n₦{results['Food Purchased']:,.2f}")
+                st.markdown(f"**Balance After Expenses**\n₦{results['Balance After Expenses']:,.2f}")
+                st.markdown(f"**- End of Day Balance**\n₦{end_of_day_balance:,.2f}")
+                st.markdown(f"**= Food Purchased**\n₦{results['Food Purchased']:,.2f}")
             
             st.markdown("---")
             st.subheader("Final Results")
             final_col1, final_col2 = st.columns(2)
             
             with final_col1:
-                st.info(f"**End of Day Balance**\n₦{end_of_day_balance:,.2f}")
-                st.success(f"**+ Paystack Payout**\n₦{payout:,.2f}")
-                st.warning(f"**= Closing Balance**\n₦{results['Closing Balance']:,.2f}")
+                st.markdown(f"**End of Day Balance**\n₦{end_of_day_balance:,.2f}")
+                st.markdown(f"**+ Paystack Payout**\n₦{payout:,.2f}")
+                st.markdown(f"**= Closing Balance**\n₦{results['Closing Balance']:,.2f}")
                 
             with final_col2:
-                st.info(f"**Closing Balance**\n₦{results['Closing Balance']:,.2f}")
-                st.error(f"**- Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
-                st.success(f"**= Revenue**\n₦{results['Revenue']:,.2f}")
+                st.markdown(f"**Closing Balance**\n₦{results['Closing Balance']:,.2f}")
+                st.markdown(f"**- Balance After Repairs**\n₦{results['Balance After Repairs']:,.2f}")
+                st.markdown(f"**= Revenue**\n₦{results['Revenue']:,.2f}")
             
-            # Save data
-            st.markdown("---")
-            st.subheader("Save Data")
-            
-            csv_data = save_to_csv(save_data, report_date)
-            st.download_button(
-                label="Download Daily Report",
-                data=csv_data,
-                file_name=f"foobr_financial_data_{report_date.strftime('%Y-%m-%d')}.csv",
-                mime="text/csv"
-            )
+            # Save button after calculations
+            with col_btn2:
+                save_button = st.button("Save Record", use_container_width=True)
+                
+                if save_button:
+                    csv_data = save_to_csv(save_data, report_date)
+                    st.success(f"Data for {report_date.strftime('%B %d, %Y')} saved successfully!")
+                    st.download_button(
+                        label="Download Daily Report",
+                        data=csv_data,
+                        file_name=f"foobr_financial_data_{report_date.strftime('%Y-%m-%d')}.csv",
+                        mime="text/csv"
+                    )
     
     # Historical Data Page
-    elif app_mode == "Historical Data":
-        st.subheader("Historical Financial Data")
+    with tab2:
+        st.markdown("<h3 class='subheader'>Historical Financial Data</h3>", unsafe_allow_html=True)
         
         # File uploader for CSV
         uploaded_file = st.file_uploader("Upload financial data CSV", type="csv")
@@ -367,10 +358,10 @@ def main():
         if data.empty:
             st.info("No historical data available. Please upload a CSV file or add entries in the Daily Entry tab.")
         else:
-            # Time period selection
-            col1, col2 = st.columns([1, 2])
+            # Simple period selector
+            col1, col2 = st.columns([1, 3])
             with col1:
-                period = st.radio("Select Period", ["All Time", "This Week", "This Month"], horizontal=False)
+                period = st.radio("Select Period", ["All Time", "This Week", "This Month"])
             
             # Map period selection to filter code
             period_filter = 'all'
@@ -390,7 +381,7 @@ def main():
             summary = generate_summary(filtered_data, period_filter)
             
             with col2:
-                st.subheader(f"{period_name} Performance Summary")
+                st.markdown(f"### {period_name} Performance Summary")
                 metric_col1, metric_col2, metric_col3 = st.columns(3)
                 
                 with metric_col1:
@@ -418,111 +409,20 @@ def main():
             
             # Export functionality
             st.markdown("---")
-            st.subheader("Export Data")
+            col_export1, col_export2 = st.columns(2)
             
-            export_tab1, export_tab2, export_tab3 = st.tabs(["Current Period", "Custom Date Range", "All Data"])
+            with col_export1:
+                st.subheader("Export Data")
+                if not filtered_data.empty:
+                    csv = filtered_data.to_csv(index=False)
+                    st.download_button(
+                        label=f"Download {period_name} Report (CSV)",
+                        data=csv,
+                        file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
             
-            with export_tab1:
-                st.write(f"Export {period_name} Data ({len(filtered_data)} records)")
-                
-                export_col1, export_col2 = st.columns(2)
-                with export_col1:
-                    if not filtered_data.empty:
-                        csv = filtered_data.to_csv(index=False)
-                        st.download_button(
-                            label=f"Download {period_name} Report (CSV)",
-                            data=csv,
-                            file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.csv",
-                            mime="text/csv"
-                        )
-                
-                with export_col2:
-                    if not filtered_data.empty:
-                        # Create Excel file
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                            filtered_data.to_excel(writer, sheet_name='Financial Data', index=False)
-                        excel_data = output.getvalue()
-                        st.download_button(
-                            label=f"Download {period_name} Report (Excel)",
-                            data=excel_data,
-                            file_name=f"foobr_financial_data_{period.lower().replace(' ', '_')}.xlsx", 
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                        
-            with export_tab2:
-                st.write("Export Data for Custom Date Range")
-                
-                # Custom date range selector
-                if not data.empty and 'Date' in data.columns:
-                    min_date = data['Date'].min()
-                    max_date = data['Date'].max()
-                    
-                    date_col1, date_col2 = st.columns(2)
-                    with date_col1:
-                        start_date = st.date_input("Start Date", min_date)
-                    with date_col2:
-                        end_date = st.date_input("End Date", max_date)
-                    
-                    # Filter data by selected date range
-                    custom_filtered = data[(data['Date'] >= pd.Timestamp(start_date)) & 
-                                          (data['Date'] <= pd.Timestamp(end_date))]
-                    
-                    st.write(f"Selected range contains {len(custom_filtered)} records")
-                    
-                    export_col1, export_col2 = st.columns(2)
-                    with export_col1:
-                        if not custom_filtered.empty:
-                            csv = custom_filtered.to_csv(index=False)
-                            st.download_button(
-                                label="Download Custom Range (CSV)",
-                                data=csv,
-                                file_name=f"foobr_financial_data_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.csv",
-                                mime="text/csv"
-                            )
-                    
-                    with export_col2:
-                        if not custom_filtered.empty:
-                            # Create Excel file
-                            output = io.BytesIO()
-                            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                                custom_filtered.to_excel(writer, sheet_name='Financial Data', index=False)
-                            excel_data = output.getvalue()
-                            st.download_button(
-                                label="Download Custom Range (Excel)",
-                                data=excel_data,
-                                file_name=f"foobr_financial_data_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.xlsx", 
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-            
-            with export_tab3:
-                st.write(f"Export All Financial Data ({len(data)} records)")
-                
-                export_col1, export_col2 = st.columns(2)
-                with export_col1:
-                    if not data.empty:
-                        csv = data.to_csv(index=False)
-                        st.download_button(
-                            label="Download All Data (CSV)",
-                            data=csv,
-                            file_name="foobr_financial_data_all.csv",
-                            mime="text/csv"
-                        )
-                
-                with export_col2:
-                    if not data.empty:
-                        # Create Excel file
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                            data.to_excel(writer, sheet_name='Financial Data', index=False)
-                        excel_data = output.getvalue()
-                        st.download_button(
-                            label="Download All Data (Excel)",
-                            data=excel_data,
-                            file_name="foobr_financial_data_all.xlsx", 
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                        
 # Run the application
 if __name__ == "__main__":
     main()
