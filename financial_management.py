@@ -90,6 +90,16 @@ st.markdown("""
         color: #888;
         margin-top: 1rem;
     }
+    .success-message {
+        padding: 1rem;
+        background-color: #d4edda;
+        color: #155724;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    .nav-button {
+        margin-top: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -164,7 +174,7 @@ def save_to_csv(data_dict, report_date):
     df['Date'] = pd.to_datetime(df['Date'])
     
     # Initialize financial_data in session state if not exists
-    if 'financial_data' not in st.session_state or st.session_state.financial_data is None or st.session_state.financial_data.empty:
+    if 'financial_data' not in st.session_state or st.session_state.financial_data is None:
         st.session_state.financial_data = df
     else:
         # Check if entry for this date already exists
@@ -175,19 +185,15 @@ def save_to_csv(data_dict, report_date):
             existing_data['Date'] = pd.to_datetime(existing_data['Date'])
         
         # Find matching dates to update
-        if 'Date' in existing_data.columns:
-            matching_dates = existing_data['Date'] == pd.to_datetime(formatted_date)
-            date_exists = any(matching_dates)
-            
-            if date_exists:
-                # Update existing entry
-                existing_data.loc[matching_dates] = df.values
-                st.session_state.financial_data = existing_data
-            else:
-                # Append new entry
-                st.session_state.financial_data = pd.concat([existing_data, df], ignore_index=True)
+        matching_dates = existing_data['Date'] == pd.to_datetime(formatted_date) if 'Date' in existing_data.columns else []
+        date_exists = any(matching_dates) if isinstance(matching_dates, pd.Series) else False
+        
+        if date_exists:
+            # Update existing entry
+            existing_data.loc[matching_dates] = df.values
+            st.session_state.financial_data = existing_data
         else:
-            # If no Date column, just append
+            # Append new entry
             st.session_state.financial_data = pd.concat([existing_data, df], ignore_index=True)
     
     # Save to persistent storage
@@ -250,6 +256,9 @@ def filter_data_by_period(data, period):
         today = pd.Timestamp.today()
         start_of_month = today.replace(day=1)
         return data[data['Date'] >= start_of_month]
+    elif period == 'day':
+        today = pd.Timestamp.today().normalize()
+        return data[data['Date'] == today]
     else:  # 'all'
         return data
 
@@ -272,6 +281,10 @@ def load_data_from_csv(file):
         st.error(f"Error loading CSV file: {e}")
         return pd.DataFrame()
 
+def switch_to_data_storage_tab():
+    """Helper function to switch to the Data Storage tab."""
+    st.session_state.active_tab = "Data Storage"
+
 # Main application
 def main():
     # Initialize debug message if not present
@@ -280,24 +293,25 @@ def main():
     
     # Load persistent data into session state FIRST THING when app starts
     if 'financial_data' not in st.session_state:
-        loaded_data = load_data_from_file()
-        if not loaded_data.empty:
-            st.session_state.financial_data = loaded_data
-        else:
-            st.session_state.financial_data = pd.DataFrame()
+        st.session_state.financial_data = load_data_from_file()
+    
+    # Initialize active tab if not present
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = "Daily Entry"
     
     # Display app title
     st.markdown("<h1 class='main-header'>Foobr Financial Dashboard</h1>", unsafe_allow_html=True)
     
-    # Top navigation using tabs instead of sidebar
-    tab1, tab2, tab3 = st.tabs(["Daily Entry", "Saved Financial Records", "Debug Info"])
+    # Top navigation using tabs
+    tab1, tab2, tab3 = st.tabs(["Daily Entry", "Saved Financial Records", "Data Storage"])
     
     # Daily Entry Page
     with tab1:
         st.markdown("<h3 class='subheader'>Daily Financial Entry</h3>", unsafe_allow_html=True)
         
         # Add date selection
-        report_date = st.date_input("Report Date", datetime.date.today())
+        selected_day = st.selectbox("Select Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
+        report_date = st.date_input("Select Date", datetime.date.today())
         
         # Create two columns for input form
         col1, col2 = st.columns(2)
@@ -333,9 +347,14 @@ def main():
                                     value=0)
 
         # Calculate and save buttons
-        col_btn1, col_btn2 = st.columns(2)
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
         with col_btn1:
             calculate_button = st.button("Calculate", use_container_width=True)
+        
+        with col_btn3:
+            go_to_storage_button = st.button("Go to Data Storage", 
+                                          on_click=switch_to_data_storage_tab,
+                                          use_container_width=True)
         
         # Display the calculations
         if calculate_button:
@@ -407,14 +426,34 @@ def main():
             with col_btn2:
                 save_button = st.button("Save Record", use_container_width=True)
 
-            # Always allow save if `results` and `save_data` exist
-            if save_button and 'save_data' in locals() and 'results' in locals():
+            if save_button:
+                # Collect values even if Calculate wasn't clicked
+                save_data = {
+                    'Starting Balance': starting_balance,
+                    'Bike Repairs': bike_repairs,
+                    'Fuel': fuel,
+                    'Airtime': airtime,
+                    'End of Day Balance': end_of_day_balance,
+                    'Payout': payout,
+                    'Orders': orders
+                }
+
+                # Recalculate results from raw input
+                results = calculate_financials(
+                    starting_balance, bike_repairs, fuel, airtime,
+                    end_of_day_balance, payout, orders
+                )
+                save_data.update(results)
+
+                # Save to session and file
                 csv_data = save_to_csv(save_data, report_date)
-                
-                # Display success message after saving
+                st.session_state.financial_data = load_data_from_file()  # Reload to include saved entry
                 st.success(f"✅ Data for {report_date.strftime('%B %d, %Y')} saved successfully!")
                 
-                # Offer download button
+                # Store success message for data storage tab
+                st.session_state.last_saved_date = report_date.strftime('%B %d, %Y')
+                st.session_state.show_storage_success = True
+                
                 st.download_button(
                     label="⬇️ Download Daily Report",
                     data=csv_data,
@@ -422,14 +461,12 @@ def main():
                     mime="text/csv",
                     use_container_width=True
                 )
-            elif save_button:
-                st.warning("⚠️ Please calculate first before saving.")
-    
+
     # Historical Data Page
     with tab2:
         st.markdown("<h3 class='subheader'>Saved Financial Records</h3>", unsafe_allow_html=True)
         
-        # Get data from session state or try loading from file
+        # Get data from session state (saved financial records)
         if 'financial_data' in st.session_state and not st.session_state.financial_data.empty:
             data = st.session_state.financial_data
             
@@ -441,18 +478,13 @@ def main():
             data = load_data_from_file()
             if not data.empty:
                 st.session_state.financial_data = data
-        
+                
         # Button to force refresh data from file
         if st.button("Refresh Data From File"):
             fresh_data = load_data_from_file()
-            if not fresh_data.empty:
-                st.session_state.financial_data = fresh_data
-                data = fresh_data
-                st.success(f"Data refreshed! Loaded {len(data)} records.")
-            else:
-                st.warning("No data found in file.")
-                data = pd.DataFrame()
-                st.session_state.financial_data = data
+            st.session_state.financial_data = fresh_data
+            data = fresh_data
+            st.success(f"Data refreshed! Loaded {len(data)} records.")
                 
         # Option to upload previous records
         with st.expander("Upload Previous Records"):
@@ -479,14 +511,12 @@ def main():
                     data = st.session_state.financial_data
                     st.success(f"Loaded {len(imported_data)} records from CSV file.")
         
-        # Check if data is empty after all attempts to load
-        if 'financial_data' not in st.session_state or st.session_state.financial_data.empty:
+        if data is None or data.empty:
             st.info("No financial records found. Add entries in the Daily Entry tab to see them here.")
-            data = pd.DataFrame()  # Ensure data is defined
         else:
-            data = st.session_state.financial_data
-            
             # Display data summaries by period
+            period = st.radio("Filter by:", ["All", "This Week", "This Month"], horizontal=True)
+            filtered_data = filter_data_by_period(data, period.lower().replace("this ", ""))
             st.markdown("### Financial Records Summary")
             
             # Ensure Date column is datetime
@@ -548,7 +578,7 @@ def main():
                         st.download_button(
                             label="Export All Records (CSV)",
                             data=all_csv,
-                            file_name=f"foobr_financial_data_all.csv",
+                            file_name=f"foobr_financial_data_all_time.csv",
                             mime="text/csv",
                             use_container_width=True
                         )
@@ -558,7 +588,7 @@ def main():
             st.subheader("All Financial Records")
             
             # Format display data
-            display_df = data.copy()
+            display_df = filtered_data.copy()
             if not display_df.empty and 'Date' in display_df.columns:
                 display_df['Date'] = display_df['Date'].dt.strftime('%b %d, %Y')
                 display_df = display_df.sort_values('Date', ascending=False)
@@ -566,51 +596,272 @@ def main():
             # Show the data table
             st.dataframe(display_df)
     
-    # Debug tab
+    # New Data Storage Tab
     with tab3:
-        st.markdown("<h3 class='subheader'>Debug Information</h3>", unsafe_allow_html=True)
-        st.markdown("This tab shows technical information to help troubleshoot any issues.")
+        st.markdown("<h3 class='subheader'>Data Storage</h3>", unsafe_allow_html=True)
         
-        # Display debug message
-        st.subheader("Session State Debug Info")
-        st.markdown(f"Debug message: {st.session_state['debug_message']}")
+        # Show success message if applicable
+        if st.session_state.get('show_storage_success', False):
+            st.markdown(f"""
+            <div class='success-message'>
+                ✅ Data for {st.session_state.get('last_saved_date', 'today')} was saved successfully!
+                The data is now available for export below.
+            </div>
+            """, unsafe_allow_html=True)
+            # Reset flag to avoid showing on refresh
+            st.session_state.show_storage_success = False
         
-        # Check if file exists and show file info
-        st.subheader("File System Info")
-        if os.path.exists('foobr_financial_data.json'):
-            file_size = os.path.getsize('foobr_financial_data.json')
-            file_mod_time = os.path.getmtime('foobr_financial_data.json')
-            mod_time_str = datetime.datetime.fromtimestamp(file_mod_time).strftime('%Y-%m-%d %H:%M:%S')
-            
-            st.write(f"Data file exists: Yes")
-            st.write(f"File size: {file_size} bytes")
-            st.write(f"Last modified: {mod_time_str}")
-            
-            # Show file contents
-            with open('foobr_financial_data.json', 'r') as f:
-                raw_content = f.read()
-            
-            st.subheader("Raw File Contents")
-            st.code(raw_content, language="json")
-        else:
-            st.write("Data file does not exist yet")
-        
-        # Show session state financial data
-        st.subheader("Session State Financial Data")
+        # Get data from session state
         if 'financial_data' in st.session_state and not st.session_state.financial_data.empty:
-            st.write(f"Number of records: {len(st.session_state.financial_data)}")
-            st.dataframe(st.session_state.financial_data)
-        else:
-            st.write("No financial data in session state")
+            data = st.session_state.financial_data
             
-        # Clear data button (for testing)
-        if st.button("Clear All Data (Debug)"):
-            if os.path.exists('foobr_financial_data.json'):
-                os.remove('foobr_financial_data.json')
-            st.session_state.financial_data = pd.DataFrame()
-            st.session_state['debug_message'] = "All data cleared"
-            st.success("All data has been cleared!")
+            # Ensure Date column is datetime
+            if 'Date' in data.columns and not pd.api.types.is_datetime64_any_dtype(data['Date']):
+                data['Date'] = pd.to_datetime(data['Date'])
+        else:
+            # Try loading from file again as a backup
+            data = load_data_from_file()
+            if not data.empty:
+                st.session_state.financial_data = data
+        
+        if data is None or data.empty:
+            st.info("No stored financial records found. Add entries in the Daily Entry tab to store them here.")
+        else:
+            # Select export period
+            st.markdown("### Export Financial Data")
+            export_period = st.radio(
+                "Select export period:",
+                ["Daily", "Weekly", "Monthly", "All Time"],
+                horizontal=True
+            )
+            
+            # Filter data based on selected period
+            period_mapping = {
+                "Daily": "day",
+                "Weekly": "week",
+                "Monthly": "month",
+                "All Time": "all"
+            }
+            filtered_data = filter_data_by_period(data, period_mapping[export_period])
+            
+            # Show data preview
+            st.subheader(f"{export_period} Data Preview")
+            
+            # Format display data
+            display_df = filtered_data.copy()
+            if not display_df.empty and 'Date' in display_df.columns:
+                display_df['Date'] = display_df['Date'].dt.strftime('%b %d, %Y')
+                display_df = display_df.sort_values('Date', ascending=False)
+            
+            # Show preview with max 5 rows
+            preview_rows = min(5, len(display_df))
+            st.dataframe(display_df.head(preview_rows))
+            
+            # Show record count
+            st.info(f"Total records for {export_period.lower()} period: {len(filtered_data)}")
+            
+            # Export options
+            st.subheader("Export Options")
+            
+            export_col1, export_col2 = st.columns(2)
+            
+            with export_col1:
+                if not filtered_data.empty:
+                    csv_data = filtered_data.to_csv(index=False)
+                    st.download_button(
+                        label=f"📥 Export {export_period} Data as CSV",
+                        data=csv_data,
+                        file_name=f"foobr_financial_{export_period.lower().replace(' ', '_')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            
+            with export_col2:
+                if not filtered_data.empty:
+                    # Create Excel format
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                        filtered_data.to_excel(writer, sheet_name='Financial Data', index=False)
+                    buffer.seek(0)
+                    
+                    st.download_button(
+                        label=f"📊 Export {export_period} Data as Excel",
+                        data=buffer,
+                        file_name=f"foobr_financial_{export_period.lower().replace(' ', '_')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+            
+            # Data summary metrics
+            if not filtered_data.empty:
+                st.markdown("### Data Summary")
+                
+                # Calculate summary stats
+                summary = generate_summary(filtered_data)
+                
+                # Display metrics in columns
+                metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+                
+                with metric_col1:
+                    st.metric("Total Revenue", f"₦{summary.get('Total Revenue', 0):,.2f}")
+                
+                with metric_col2:
+                    st.metric("Total Orders", f"{summary.get('Total Orders', 0)}")
+                
+                with metric_col3:
+                    st.metric("Avg Order Value", f"₦{summary.get('Average Order Value', 0):,.2f}")
+                
+                with metric_col4:
+                    st.metric("Avg Daily Revenue", f"₦{summary.get('Average Daily Revenue', 0):,.2f}")
+                
+                # Additional data management options
+                st.markdown("### Data Management")
+                
+                # Create columns for data management options
+                mgmt_col1, mgmt_col2 = st.columns(2)
+                
+                with mgmt_col1:
+                    # Backup data option
+                    st.markdown("#### Backup Data")
+                    st.markdown("Create a complete backup of all your financial records.")
+                    
+                    if st.button("Create Full Backup", use_container_width=True):
+                        # Create backup with timestamp
+                        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        backup_filename = f"foobr_financial_backup_{timestamp}.csv"
+                        
+                        backup_csv = data.to_csv(index=False)
+                        st.download_button(
+                            label="⬇️ Download Backup File",
+                            data=backup_csv,
+                            file_name=backup_filename,
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+                        st.success(f"Backup created successfully! Contains {len(data)} records.")
+                
+                with mgmt_col2:
+                    # Data cleanup options
+                    st.markdown("#### Filter Data")
+                    st.markdown("View and export data for a specific date range.")
+                    
+                    # Date range selector
+                    start_date = st.date_input("Start Date", 
+                                              value=datetime.date.today() - datetime.timedelta(days=30),
+                                              key="date_range_start")
+                    end_date = st.date_input("End Date", 
+                                            value=datetime.date.today(),
+                                            key="date_range_end")
+                    
+                    # Filter button
+                    if st.button("Filter by Date Range", use_container_width=True):
+                        # Convert dates to pandas datetime
+                        start_dt = pd.Timestamp(start_date)
+                        end_dt = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)  # Include end date fully
+                        
+                        # Apply filter
+                        date_filtered = data[(data['Date'] >= start_dt) & (data['Date'] <= end_dt)]
+                        
+                        if date_filtered.empty:
+                            st.warning("No records found for the selected date range.")
+                        else:
+                            st.success(f"Found {len(date_filtered)} records between {start_date} and {end_date}.")
+                            
+                            # Format for display
+                            display_filtered = date_filtered.copy()
+                            display_filtered['Date'] = display_filtered['Date'].dt.strftime('%b %d, %Y')
+                            
+                            # Show preview
+                            st.dataframe(display_filtered)
+                            
+                            # Export option
+                            filtered_csv = date_filtered.to_csv(index=False)
+                            date_range_str = f"{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}"
+                            
+                            st.download_button(
+                                label="Export Filtered Data",
+                                data=filtered_csv,
+                                file_name=f"foobr_financial_{date_range_str}.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
+                
+                # Advanced data storage options
+                with st.expander("Advanced Data Options"):
+                    adv_col1, adv_col2 = st.columns(2)
+                    
+                    with adv_col1:
+                        st.markdown("#### Import & Merge Data")
+                        st.markdown("Import data from another CSV file and merge with existing records.")
+                        
+                        uploaded_merge = st.file_uploader("Upload CSV to merge", type="csv", key="merge_uploader")
+                        if uploaded_merge is not None:
+                            imported_data = load_data_from_csv(uploaded_merge)
+                            if not imported_data.empty:
+                                if st.button("Merge with Existing Data"):
+                                    # Convert dates for proper comparison
+                                    if 'Date' in imported_data.columns:
+                                        imported_data['Date'] = pd.to_datetime(imported_data['Date'])
+                                    
+                                    if 'Date' in data.columns:
+                                        data['Date'] = pd.to_datetime(data['Date'])
+                                        
+                                    # Create combined dataset
+                                    combined = pd.concat([data, imported_data])
+                                    # Drop duplicates by date
+                                    deduped = combined.drop_duplicates(subset=['Date']).reset_index(drop=True)
+                                    
+                                    # Update session state and save
+                                    st.session_state.financial_data = deduped
+                                    save_data_to_file(deduped)
+                                    
+                                    st.success(f"Successfully merged data! New total: {len(deduped)} records.")
+                    
+                    with adv_col2:
+                        st.markdown("#### Data Cleanup")
+                        st.markdown("Options for cleaning up or resetting your data.")
+                        
+                        if st.button("Deduplicate Records"):
+                            if 'Date' in data.columns:
+                                data['Date'] = pd.to_datetime(data['Date'])
+                                
+                            # Count before deduplication
+                            count_before = len(data)
+                            
+                            # Deduplicate
+                            deduped = data.drop_duplicates(subset=['Date']).reset_index(drop=True)
+                            
+                            # Count after deduplication
+                            count_after = len(deduped)
+                            dupes_removed = count_before - count_after
+                            
+                            if dupes_removed > 0:
+                                # Update session state and save
+                                st.session_state.financial_data = deduped
+                                save_data_to_file(deduped)
+                                st.success(f"Removed {dupes_removed} duplicate records!")
+                            else:
+                                st.info("No duplicate records found.")
+                
+                # About this feature
+                with st.expander("About the Data Storage Feature"):
+                    st.markdown("""
+                    ### About Data Storage
+                    
+                    This feature allows you to:
+                    
+                    - Store daily financial entries automatically
+                    - Export data in different time periods (daily, weekly, monthly)
+                    - Create full backups of your financial records
+                    - Filter data by custom date ranges
+                    - Import and merge data from other sources
+                    - Clean up duplicate records
+                    
+                    **Data Storage Location:** All data is stored locally in a file called `foobr_financial_data.json`.
+                    
+                    **Data Privacy:** Your financial data never leaves your computer and is not shared with any third parties.
+                    """)
     
-# Run the application
+    # Run the application
 if __name__ == "__main__":
     main()
