@@ -164,7 +164,7 @@ def save_to_csv(data_dict, report_date):
     df['Date'] = pd.to_datetime(df['Date'])
     
     # Initialize financial_data in session state if not exists
-    if 'financial_data' not in st.session_state or st.session_state.financial_data is None:
+    if 'financial_data' not in st.session_state or st.session_state.financial_data is None or st.session_state.financial_data.empty:
         st.session_state.financial_data = df
     else:
         # Check if entry for this date already exists
@@ -175,15 +175,19 @@ def save_to_csv(data_dict, report_date):
             existing_data['Date'] = pd.to_datetime(existing_data['Date'])
         
         # Find matching dates to update
-        matching_dates = existing_data['Date'] == pd.to_datetime(formatted_date) if 'Date' in existing_data.columns else []
-        date_exists = any(matching_dates) if isinstance(matching_dates, pd.Series) else False
-        
-        if date_exists:
-            # Update existing entry
-            existing_data.loc[matching_dates] = df.values
-            st.session_state.financial_data = existing_data
+        if 'Date' in existing_data.columns:
+            matching_dates = existing_data['Date'] == pd.to_datetime(formatted_date)
+            date_exists = any(matching_dates)
+            
+            if date_exists:
+                # Update existing entry
+                existing_data.loc[matching_dates] = df.values
+                st.session_state.financial_data = existing_data
+            else:
+                # Append new entry
+                st.session_state.financial_data = pd.concat([existing_data, df], ignore_index=True)
         else:
-            # Append new entry
+            # If no Date column, just append
             st.session_state.financial_data = pd.concat([existing_data, df], ignore_index=True)
     
     # Save to persistent storage
@@ -276,7 +280,11 @@ def main():
     
     # Load persistent data into session state FIRST THING when app starts
     if 'financial_data' not in st.session_state:
-        st.session_state.financial_data = load_data_from_file()
+        loaded_data = load_data_from_file()
+        if not loaded_data.empty:
+            st.session_state.financial_data = loaded_data
+        else:
+            st.session_state.financial_data = pd.DataFrame()
     
     # Display app title
     st.markdown("<h1 class='main-header'>Foobr Financial Dashboard</h1>", unsafe_allow_html=True)
@@ -402,8 +410,11 @@ def main():
             # Always allow save if `results` and `save_data` exist
             if save_button and 'save_data' in locals() and 'results' in locals():
                 csv_data = save_to_csv(save_data, report_date)
-                st.session_state.financial_data = load_data_from_file()  # Refresh session state from file
+                
+                # Display success message after saving
                 st.success(f"✅ Data for {report_date.strftime('%B %d, %Y')} saved successfully!")
+                
+                # Offer download button
                 st.download_button(
                     label="⬇️ Download Daily Report",
                     data=csv_data,
@@ -418,7 +429,7 @@ def main():
     with tab2:
         st.markdown("<h3 class='subheader'>Saved Financial Records</h3>", unsafe_allow_html=True)
         
-        # Get data from session state (saved financial records)
+        # Get data from session state or try loading from file
         if 'financial_data' in st.session_state and not st.session_state.financial_data.empty:
             data = st.session_state.financial_data
             
@@ -430,13 +441,18 @@ def main():
             data = load_data_from_file()
             if not data.empty:
                 st.session_state.financial_data = data
-                
+        
         # Button to force refresh data from file
         if st.button("Refresh Data From File"):
             fresh_data = load_data_from_file()
-            st.session_state.financial_data = fresh_data
-            data = fresh_data
-            st.success(f"Data refreshed! Loaded {len(data)} records.")
+            if not fresh_data.empty:
+                st.session_state.financial_data = fresh_data
+                data = fresh_data
+                st.success(f"Data refreshed! Loaded {len(data)} records.")
+            else:
+                st.warning("No data found in file.")
+                data = pd.DataFrame()
+                st.session_state.financial_data = data
                 
         # Option to upload previous records
         with st.expander("Upload Previous Records"):
@@ -463,9 +479,13 @@ def main():
                     data = st.session_state.financial_data
                     st.success(f"Loaded {len(imported_data)} records from CSV file.")
         
-        if data is None or data.empty:
+        # Check if data is empty after all attempts to load
+        if 'financial_data' not in st.session_state or st.session_state.financial_data.empty:
             st.info("No financial records found. Add entries in the Daily Entry tab to see them here.")
+            data = pd.DataFrame()  # Ensure data is defined
         else:
+            data = st.session_state.financial_data
+            
             # Display data summaries by period
             st.markdown("### Financial Records Summary")
             
